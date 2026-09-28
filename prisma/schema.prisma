@@ -1,0 +1,250 @@
+// ============================================================
+// PASzar — Prisma Schema
+// ============================================================
+// ORM: @prisma/client v7.10.0
+// Database: PostgreSQL (Supabase Free Tier)
+// Referensi: docs/PRD_masterplan.md (Bab 3) & docs/architecture.md
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Transaction-mode pooler — digunakan saat runtime (Next.js, Vercel)
+  url       = env("DATABASE_URL")
+  // Direct connection — digunakan oleh `prisma migrate dev/deploy`
+  directUrl = env("DIRECT_URL")
+}
+
+// ================================================================
+// MODEL: Admin
+// ================================================================
+// Hanya ada 1 akun SuperAdmin. Tidak ada registrasi publik.
+// Password selalu di-hash dengan bcrypt SEBELUM disimpan ke DB.
+// Tidak ada relasi ke model lain — admin hanya berinteraksi via
+// Server Actions yang dilindungi getServerSession().
+
+model Admin {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  hashedPassword String   @map("hashed_password")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("admins")
+}
+
+// ================================================================
+// MODEL: Category
+// ================================================================
+// Kategori produk: Mebel, Tenun, Kuliner, Kerajinan, dll.
+// Slug digunakan untuk URL-friendly routing di halaman katalog.
+// sortOrder mengontrol urutan tampil di UI (dapat di-drag-reorder
+// oleh admin melalui dashboard kelola kategori).
+//
+// RELASI — onDelete: Restrict pada Product:
+//   Kategori tidak bisa dihapus selama masih ada produk yang
+//   mengacu padanya. Admin wajib memindahkan/menghapus produk
+//   terlebih dahulu sebelum menghapus kategori.
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String?  @db.Text
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  products Product[]
+
+  @@map("categories")
+}
+
+// ================================================================
+// MODEL: Product
+// ================================================================
+// Produk kerajinan tangan warga binaan.
+//
+// FIELD PENTING:
+//   story   — narasi latar belakang pembuatan produk (editorial copy).
+//             Kosongkan jika belum ada cerita; UI akan menyembunyikannya.
+//   image   — URL publik Supabase Storage (bucket: product-images).
+//             Hanya MIME type jpg/png/webp yang diizinkan (validasi client).
+//   isActive — Soft-disable produk tanpa menghapus data historis Order.
+//              Produk inactive tidak muncul di halaman publik.
+//   price   — Harga dalam SATUAN RUPIAH PENUH (Int, bukan Decimal).
+//             Contoh: Rp 1.500.000 = 1500000. Hindari floating-point error.
+//
+// RELASI:
+//   Category  — onDelete: Restrict (lihat komentar di model Category)
+//   OrderItem — relasi satu ke banyak
+
+model Product {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String   @db.Text
+  story       String?  @db.Text
+  price       Int      // Rupiah penuh, tanpa desimal
+  stock       Int      @default(0)
+  image       String   // URL publik Supabase Storage
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  categoryId String    @map("category_id")
+  category   Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  orderItems OrderItem[]
+
+  // Index untuk query paling umum di katalog publik
+  @@index([categoryId], name: "idx_products_category_id")
+  @@index([isActive, createdAt(sort: Desc)], name: "idx_products_active_created")
+  @@map("products")
+}
+
+// ================================================================
+// MODEL: Order
+// ================================================================
+// Pesanan yang dibuat saat pengunjung menyelesaikan checkout.
+//
+// LIFECYCLE (Fase 1 — MVP via WhatsApp):
+//   Dibuat → PENDING → CONFIRMED → PROCESSING → SHIPPED → COMPLETED
+//                                              └─────────────────────→ CANCELLED
+//
+// LIFECYCLE (Fase 2 — Payment Gateway, TODO):
+//   Dibuat → WAITING_PAYMENT → PAID → PROCESSING → SHIPPED → COMPLETED
+//                           └─────→ PAYMENT_FAILED
+//
+// KOLOM PENTING:
+//   orderCode — Kode unik yang dikirim via WhatsApp. Format: PZ-YYYYMMDD-XXXXX
+//               Contoh: PZ-20261001-A3F7K. Di-generate oleh lib/utils.ts.
+//   totalAmount — Total harga (Int, Rupiah penuh). Dihitung dan dikunci
+//                 saat order dibuat; tidak berubah meskipun harga produk diupdate.
+//
+// FUTURE-PROOFING (Fase 2 — Payment Gateway):
+//   paymentMethod — "midtrans_snap" | "manual_transfer" | null (Fase 1)
+//   paymentToken  — Midtrans Snap token untuk redirect ke halaman bayar.
+//                   Nilainya null di Fase 1 (alur WA manual).
+//   Catatan: Kolom ini sudah ada di schema sejak Fase 1 agar migrasi
+//            Fase 2 tidak memerlukan perubahan destruktif pada tabel orders.
+
+model Order {
+  id                 String      @id @default(cuid())
+  orderCode          String      @unique @map("order_code")
+
+  // Data Pelanggan
+  customerName       String      @map("customer_name")
+  customerPhone      String      @map("customer_phone")
+  customerAddress    String      @map("customer_address") @db.Text
+  customerCity       String      @map("customer_city")
+  customerProvince   String      @map("customer_province")
+  customerPostalCode String      @map("customer_postal_code")
+  notes              String?     @db.Text
+
+  // Finansial
+  totalAmount        Int         @map("total_amount") // Rupiah penuh
+
+  // Status & Alur
+  status             OrderStatus @default(PENDING)
+
+  // ── FUTURE-PROOFING: Kolom Payment Gateway (Fase 2) ──────────
+  // Kolom ini nullable dan tidak digunakan di Fase 1 (MVP WA).
+  // Ditambahkan sejak awal agar schema tidak perlu migrasi besar saat
+  // Payment Gateway diintegrasikan di Fase 2.
+  paymentMethod      String?     @map("payment_method") // "midtrans_snap" | "manual_transfer"
+  paymentToken       String?     @map("payment_token")  // Midtrans Snap token
+  // TODO: Fase 2 — tambahkan kolom berikut saat integrasi Payment Gateway:
+  // midtransOrderId  String?   @unique @map("midtrans_order_id")
+  // paymentUrl       String?   @map("payment_url")
+  // paidAt           DateTime? @map("paid_at")
+  // ─────────────────────────────────────────────────────────────
+
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  items OrderItem[]
+
+  // Index untuk query tabel pesanan di admin dashboard
+  @@index([status, createdAt(sort: Desc)], name: "idx_orders_status_created")
+  @@index([orderCode], name: "idx_orders_order_code")
+  @@map("orders")
+}
+
+// ================================================================
+// MODEL: OrderItem
+// ================================================================
+// Baris item produk dalam satu pesanan.
+//
+// POLA SNAPSHOT DATA (WAJIB DIPAHAMI):
+//   productName dan productPrice di-copy dari data produk SAAT ORDER DIBUAT.
+//   Ini pola desain yang disengaja:
+//     → Riwayat pesanan TIDAK AKAN BERUBAH meskipun admin kemudian mengubah
+//       nama atau harga produk di masa mendatang.
+//     → Data asli produk tetap bisa diakses via relasi ke model Product.
+//
+// RELASI:
+//   Order   — onDelete: Cascade (jika Order dihapus, semua ItemOrder-nya ikut terhapus)
+//   Product — onDelete: Restrict (produk tidak bisa dihapus jika ada riwayat ordernya)
+
+model OrderItem {
+  id           String @id @default(cuid())
+  quantity     Int
+
+  // Snapshot data produk — nilai dikunci saat order dibuat
+  productName  String @map("product_name")  // Salinan Product.name
+  productPrice Int    @map("product_price") // Salinan Product.price (Rupiah penuh)
+  subtotal     Int    // quantity × productPrice, dihitung di server
+
+  // Relations
+  orderId   String  @map("order_id")
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  productId String  @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId], name: "idx_order_items_order_id")
+  @@map("order_items")
+}
+
+// ================================================================
+// ENUM: OrderStatus
+// ================================================================
+// Mencakup status Fase 1 (MVP via WhatsApp) DAN Fase 2 (Payment Gateway).
+// Penambahan status Fase 2 sejak dini menghindari ALTER TYPE di production.
+//
+// FASE 1 — MVP (WhatsApp Flow):
+//   PENDING     → Order dibuat oleh pengunjung, menunggu konfirmasi admin via WA
+//   CONFIRMED   → Admin mengkonfirmasi pesanan (via WA atau dashboard)
+//   PROCESSING  → Produk sedang dikemas oleh tim Koperasi
+//   SHIPPED     → Produk sudah dikirim ke ekspedisi
+//   COMPLETED   → Produk diterima oleh pembeli (konfirmasi final)
+//   CANCELLED   → Order dibatalkan (oleh admin atau pembeli via WA)
+//
+// FASE 2 — Payment Gateway (Midtrans/lainnya):
+//   WAITING_PAYMENT → Order dibuat, menunggu pembayaran dari customer
+//   PAID            → Pembayaran dikonfirmasi oleh webhook Payment Gateway
+//   PAYMENT_FAILED  → Pembayaran gagal atau kadaluarsa (lewat batas waktu)
+//   REFUNDED        → Dana dikembalikan ke customer setelah PAID
+
+enum OrderStatus {
+  // ── Fase 1: WhatsApp Manual Flow ──────────────────────────────
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  COMPLETED
+  CANCELLED
+
+  // ── Fase 2: Payment Gateway Flow (TODO) ───────────────────────
+  WAITING_PAYMENT
+  PAID
+  PAYMENT_FAILED
+  REFUNDED
+}

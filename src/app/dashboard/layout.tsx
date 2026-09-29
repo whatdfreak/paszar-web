@@ -14,16 +14,17 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-row bg-white">
+    <div className="min-h-screen flex flex-row bg-slate-50">
       {/* ── Sidebar ── */}
       <AdminSidebar />
 
       {/* ── Main Content ── */}
       <main className="flex-1 min-w-0 overflow-auto">
-        {/* Spacer untuk hamburger button di mobile (top-4 left-4, ~48px) */}
+        {/* Spacer untuk hamburger button di mobile */}
         <div className="md:hidden h-14" aria-hidden="true" />
         {children}
       </main>
     </div>
   );
+
 }

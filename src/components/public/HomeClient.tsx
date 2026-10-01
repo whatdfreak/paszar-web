@@ -12,6 +12,7 @@ import Image from "next/image";
 import { useDictionary } from "@/hooks/useDictionary";
 import HeroImageFader from "@/components/public/HeroImageFader";
 import FeaturedCarousel from "@/components/public/FeaturedCarousel";
+import AnimatedSection from "@/components/public/AnimatedSection";
 import type { ProductCardData } from "@/components/public/ProductCard";
 
 // Trust bar icon paths
@@ -36,7 +37,7 @@ export default function HomeClient({ products }: HomeClientProps) {
   return (
     <>
       {/* ===== HERO ===== */}
-      <section className="relative w-full min-h-[85vh] lg:min-h-screen bg-stone-100 overflow-hidden">
+      <section className="relative w-full min-h-[70vh] lg:min-h-screen bg-stone-100 overflow-hidden">
         {/* Background Image Fader */}
         <HeroImageFader />
         
@@ -44,7 +45,7 @@ export default function HomeClient({ products }: HomeClientProps) {
         <div className="absolute inset-0 bg-black/50 z-[5]"></div>
         
         {/* Text Overlay */}
-        <div className="relative z-10 w-full h-full min-h-[85vh] lg:min-h-screen flex flex-col justify-center max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-16">
+        <div className="relative z-10 w-full h-full min-h-[70vh] lg:min-h-screen flex flex-col justify-center max-w-7xl mx-auto px-6 lg:px-8 py-12 md:py-24">
           <div className="max-w-2xl">
             <p className="text-[11px] uppercase tracking-[0.3em] text-white font-normal mb-6 lg:mb-8 drop-shadow-sm">
               {d.hero.eyebrow}
@@ -66,7 +67,7 @@ export default function HomeClient({ products }: HomeClientProps) {
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 lg:gap-8">
               <Link
                 href="/katalog"
-                className="inline-flex justify-center items-center gap-3 px-8 py-4 bg-transparent border border-white text-white text-[11px] uppercase tracking-[0.2em] font-normal hover:bg-white hover:text-black transition-all duration-300 rounded-none w-full sm:w-auto"
+                className="inline-flex justify-center items-center gap-3 px-8 py-4 bg-transparent border border-white text-white text-[11px] uppercase tracking-[0.2em] font-normal hover:bg-white hover:text-black transition-all duration-300 rounded-none w-auto"
               >
                 {d.hero.cta}
               </Link>
@@ -82,8 +83,8 @@ export default function HomeClient({ products }: HomeClientProps) {
       </section>
 
       {/* ===== ARTISANS ===== */}
-      <section id="artisans" className="bg-stone-50 py-20 md:py-24 lg:py-32">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <section id="artisans" className="bg-stone-50 py-12 md:py-16 lg:py-20">
+        <AnimatedSection className="max-w-7xl mx-auto px-6 lg:px-8">
           <div className="max-w-xl mb-12 md:mb-16">
             <p className="text-[11px] uppercase tracking-[0.3em] text-stone-400 font-normal mb-4">
               {d.artisans.eyebrow}
@@ -115,12 +116,12 @@ export default function HomeClient({ products }: HomeClientProps) {
               </div>
             ))}
           </div>
-        </div>
+        </AnimatedSection>
       </section>
 
       {/* ===== FEATURED PRODUCTS ===== */}
-      <section className="bg-white py-20 md:py-24 lg:py-32">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <section className="bg-white py-12 md:py-16 lg:py-20">
+        <AnimatedSection className="max-w-7xl mx-auto px-6 lg:px-8" delay={100}>
           <div className="flex items-end justify-between mb-10 md:mb-14">
             <div>
               <p className="text-[11px] uppercase tracking-[0.3em] text-stone-400 font-normal mb-4">
@@ -161,12 +162,19 @@ export default function HomeClient({ products }: HomeClientProps) {
               {d.featured.viewAllMobile}
             </Link>
           </div>
-        </div>
+        </AnimatedSection>
       </section>
 
       {/* ===== TRUST BAR ===== */}
-      <section className="bg-[#BA7517] py-14 lg:py-16">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <section className="relative py-12 lg:py-14 bg-slate-900 overflow-hidden">
+        {/* Woven Pattern Overlay (CSS SVG) */}
+        <div 
+          className="absolute inset-0 opacity-[0.03] pointer-events-none"
+          style={{
+            backgroundImage: `url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M20 20.5V18H0v-2h20v-2H0v-2h20v-2H0V8h20V6H0V4h20V2H0V0h22v20h2v-20h2v20h2v-20h2v20h2v-20h2v20h2v-20h2v20h2v-20h2v22H20v2h20v2H20v2h20v2H20v2h20v2H20v2h20v2H20v2h20v2H20v2h20v-20h-2v20h-2v-20h-2v20h-2v-20h-2v20h-2v-20h-2v20h-2v-20h-2v20h-2v-22zM0 22h20v2H0v-2zm0 4h20v2H0v-2zm0 4h20v2H0v-2zm0 4h20v2H0v-2zm0 4h20v2H0v-2z' fill='%23ffffff' fill-rule='evenodd'/%3E%3C/svg%3E")`
+          }}
+        ></div>
+        <AnimatedSection className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-6">
             {d.trust.map((item, i) => (
               <div key={item.title} className="text-center lg:text-left">
@@ -180,12 +188,12 @@ export default function HomeClient({ products }: HomeClientProps) {
               </div>
             ))}
           </div>
-        </div>
+        </AnimatedSection>
       </section>
 
       {/* ===== ABOUT / STORY ===== */}
-      <section id="about" className="bg-white py-20 md:py-24 lg:py-32">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <section id="about" className="bg-white py-12 md:py-16 lg:py-20">
+        <AnimatedSection className="max-w-7xl mx-auto px-6 lg:px-8" delay={100}>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
             {/* Image */}
             <div className="relative aspect-square md:aspect-[4/5] bg-stone-100 overflow-hidden order-2 lg:order-1">
@@ -238,12 +246,12 @@ export default function HomeClient({ products }: HomeClientProps) {
               </div>
             </div>
           </div>
-        </div>
+        </AnimatedSection>
       </section>
 
       {/* ===== PARTNERS ===== */}
-      <section className="bg-stone-50 py-16 lg:py-20 border-t border-stone-200">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <section className="bg-stone-50 py-12 lg:py-16 border-t border-stone-200">
+        <AnimatedSection className="max-w-7xl mx-auto px-6 lg:px-8">
           <p className="text-[11px] uppercase tracking-[0.3em] text-stone-400 font-normal text-center mb-10">
             {d.partners.eyebrow}
           </p>
@@ -262,7 +270,7 @@ export default function HomeClient({ products }: HomeClientProps) {
               {d.partners.hashtag}
             </span>
           </div>
-        </div>
+        </AnimatedSection>
       </section>
     </>
   );

@@ -68,11 +68,11 @@ export default function ProductCard({ product }: ProductCardProps) {
           />
         </Link>
 
-        {/* Quick Add Button — pojok kanan bawah dalam gambar */}
+        {/* Quick Add Button — Desktop (Hover inside image) */}
         <button
           onClick={handleQuickAdd}
           aria-label={`Tambah ${product.name} ke keranjang`}
-          className="absolute bottom-3 right-3 z-10 w-9 h-9 flex items-center justify-center bg-white border border-stone-200 text-stone-900 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ease-out hover:bg-stone-900 hover:text-white hover:border-stone-900"
+          className="hidden md:flex absolute bottom-3 right-3 z-10 w-9 h-9 items-center justify-center bg-white border border-stone-200 text-stone-900 opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ease-out hover:bg-stone-900 hover:text-white hover:border-stone-900"
         >
           <svg
             className="w-4 h-4"
@@ -91,19 +91,42 @@ export default function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {/* Text Container */}
-      <Link href={`/produk/${product.slug}`} className="block">
-        <div className="space-y-1">
-          <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-normal">
-            {product.category}
-          </p>
-          <h3 className="text-sm font-normal text-stone-900 leading-snug line-clamp-2">
-            {product.name}
-          </h3>
-          <p className="text-sm font-light text-stone-600 pt-0.5">
-            {formatRupiah(product.price)}
-          </p>
-        </div>
-      </Link>
+      <div className="relative">
+        <Link href={`/produk/${product.slug}`} className="block pr-8">
+          <div className="space-y-1">
+            <p className="text-[10px] uppercase tracking-[0.2em] text-stone-400 font-normal">
+              {product.category}
+            </p>
+            <h3 className="text-sm font-normal text-stone-900 leading-snug line-clamp-2">
+              {product.name}
+            </h3>
+            <p className="text-sm font-light text-stone-600 pt-0.5">
+              {formatRupiah(product.price)}
+            </p>
+          </div>
+        </Link>
+        
+        {/* Quick Add Button — Mobile (Always visible bottom right) */}
+        <button
+          onClick={handleQuickAdd}
+          aria-label={`Tambah ${product.name} ke keranjang`}
+          className="md:hidden absolute bottom-0 right-0 z-10 w-8 h-8 flex items-center justify-center bg-white border border-stone-200 text-stone-900 hover:bg-stone-50 transition-colors"
+        >
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.5}
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007z"
+            />
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }

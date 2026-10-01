@@ -97,9 +97,10 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`text-[11px] uppercase tracking-[0.2em] font-light transition-colors duration-300 ${navColor}`}
+                className={`group relative text-[11px] uppercase tracking-[0.2em] font-light transition-colors duration-300 ${navColor}`}
               >
                 {link.label}
+                <span className="absolute -bottom-1.5 left-1/2 w-0 h-[1px] bg-current -translate-x-1/2 transition-all duration-300 group-hover:w-[calc(100%-0.2em)]"></span>
               </Link>
             ))}
           </nav>

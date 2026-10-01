@@ -72,7 +72,7 @@ export default function CartDrawer() {
               </p>
               <button
                 onClick={closeCart}
-                className="text-[11px] uppercase tracking-[0.15em] text-stone-500 font-light border-b border-stone-300 pb-0.5 hover:text-stone-900 transition-colors"
+                className="text-[11px] uppercase tracking-[0.15em] font-normal border border-stone-900 px-8 py-3 rounded-none text-stone-900 hover:bg-stone-50 transition-colors"
               >
                 Lanjut Belanja
               </button>

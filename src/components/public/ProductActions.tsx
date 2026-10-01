@@ -74,7 +74,7 @@ export default function ProductActions({ product }: ProductActionsProps) {
           <div className="inline-flex items-center border border-stone-300">
             <button
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors text-lg font-light"
+              className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 hover:bg-stone-100 active:bg-stone-200 transition-colors text-lg font-light"
               aria-label="Decrease"
             >
               −
@@ -84,7 +84,7 @@ export default function ProductActions({ product }: ProductActionsProps) {
             </span>
             <button
               onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
-              className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors text-lg font-light"
+              className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 hover:bg-stone-100 active:bg-stone-200 transition-colors text-lg font-light"
               aria-label="Increase"
               disabled={quantity >= product.stock}
             >

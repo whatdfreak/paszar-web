@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCartStore } from "@/stores/cartStore";
+import { useDictionary } from "@/hooks/useDictionary";
 
 interface ProductActionsProps {
   product: {
@@ -23,6 +24,7 @@ function formatRupiah(amount: number) {
 }
 
 export default function ProductActions({ product }: ProductActionsProps) {
+  const d = useDictionary().product;
   const [quantity, setQuantity] = useState(1);
   const addItem = useCartStore((s) => s.addItem);
   const openCart = useCartStore((s) => s.openCart);
@@ -66,14 +68,14 @@ export default function ProductActions({ product }: ProductActionsProps) {
       {/* Quantity */}
       <div className="mb-8 pb-8 border-b border-stone-200">
         <p className="text-[11px] uppercase tracking-[0.15em] text-stone-500 font-normal mb-3">
-          Jumlah
+          {d.qty}
         </p>
         <div className="flex items-center gap-4">
           <div className="inline-flex items-center border border-stone-300">
             <button
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
               className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors text-lg font-light"
-              aria-label="Kurangi"
+              aria-label="Decrease"
             >
               −
             </button>
@@ -83,14 +85,14 @@ export default function ProductActions({ product }: ProductActionsProps) {
             <button
               onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
               className="w-11 h-11 flex items-center justify-center text-stone-500 hover:text-stone-900 transition-colors text-lg font-light"
-              aria-label="Tambah"
+              aria-label="Increase"
               disabled={quantity >= product.stock}
             >
               +
             </button>
           </div>
           <p className="text-[12px] text-stone-400 font-light">
-            {product.stock > 0 ? `${product.stock} tersedia` : "Stok habis"}
+            {product.stock > 0 ? d.available(product.stock) : d.outOfStock}
           </p>
         </div>
       </div>
@@ -102,14 +104,14 @@ export default function ProductActions({ product }: ProductActionsProps) {
           disabled={product.stock === 0}
           className="w-full py-4 border border-stone-900 bg-white text-stone-900 text-[11px] uppercase tracking-[0.15em] font-normal hover:bg-stone-100 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Tambah ke Keranjang
+          {d.addToCart}
         </button>
         <button
           onClick={handleBuyNow}
           disabled={product.stock === 0}
           className="w-full py-4 bg-stone-900 text-white text-[11px] uppercase tracking-[0.15em] font-normal hover:bg-stone-800 transition-colors duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          Beli Sekarang
+          {d.buyNow}
         </button>
       </div>
     </>

@@ -5,17 +5,38 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useCartStore, cartItemCount } from "@/stores/cartStore";
 import { useLangStore, type Lang } from "@/stores/langStore";
 import { useDictionary } from "@/hooks/useDictionary";
 
 export default function Header() {
+  const pathname = usePathname();
+  const isHomePage = pathname === "/" || pathname === "/en" || pathname === "/id";
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(!isHomePage);
+  
   const toggleCart = useCartStore((s) => s.toggleCart);
   const count = useCartStore(cartItemCount);
   const { lang, setLang } = useLangStore();
   const d = useDictionary();
+
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isHomePage) {
+        setIsScrolled(window.scrollY > window.innerHeight * 0.8);
+      } else {
+        setIsScrolled(true);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    handleScroll(); // Check on mount
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [isHomePage]);
+
+  const isTransparent = isHomePage && !isScrolled;
 
   const navLinks = [
     { label: d.header.nav.home, href: "/" },
@@ -24,38 +45,47 @@ export default function Header() {
     { label: d.header.nav.about, href: "/#about" },
   ];
 
-  const LangToggle = () => (
-    <div className="flex items-center gap-0.5 text-[10px] tracking-[0.15em] uppercase select-none">
-      {(["en", "id"] as Lang[]).map((l, i) => (
-        <span key={l} className="flex items-center">
-          <button
-            onClick={() => setLang(l)}
-            aria-label={`Switch to ${l.toUpperCase()}`}
-            className={`px-1 py-0.5 transition-colors duration-200 ${
-              lang === l
-                ? "font-semibold text-stone-900"
-                : "font-light text-stone-400 hover:text-stone-700"
-            }`}
-          >
-            {l.toUpperCase()}
-          </button>
-          {i === 0 && (
-            <span className="text-stone-300 leading-none select-none">|</span>
-          )}
-        </span>
-      ))}
-    </div>
-  );
+  const LangToggle = ({ isMobile = false }) => {
+    const textColor = isTransparent && !isMobile ? "text-white hover:text-stone-300" : "text-stone-400 hover:text-stone-700";
+    const activeColor = isTransparent && !isMobile ? "text-white font-semibold" : "text-stone-900 font-semibold";
+    const dividerColor = isTransparent && !isMobile ? "text-white/50" : "text-stone-300";
+
+    return (
+      <div className="flex items-center gap-0.5 text-[10px] tracking-[0.15em] uppercase select-none">
+        {(["en", "id"] as Lang[]).map((l, i) => (
+          <span key={l} className="flex items-center">
+            <button
+              onClick={() => setLang(l)}
+              aria-label={`Switch to ${l.toUpperCase()}`}
+              className={`px-1 py-0.5 transition-colors duration-300 ${
+                lang === l ? activeColor : `font-light ${textColor}`
+              }`}
+            >
+              {l.toUpperCase()}
+            </button>
+            {i === 0 && (
+              <span className={`leading-none select-none transition-colors duration-300 ${dividerColor}`}>|</span>
+            )}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  const headerBg = isTransparent ? "bg-transparent border-transparent" : "bg-white/95 backdrop-blur-md border-b border-stone-200 shadow-sm";
+  const iconColor = isTransparent ? "text-white hover:text-stone-300" : "text-stone-500 hover:text-stone-900";
+  const navColor = isTransparent ? "text-white hover:text-stone-300" : "text-stone-500 hover:text-stone-900";
+  const brandColor = isTransparent ? "text-white hover:text-stone-300" : "text-stone-900 hover:text-stone-600";
 
   return (
-    <header className="sticky top-0 z-50 bg-white border-b border-stone-200">
+    <header className={`fixed w-full top-0 z-50 transition-colors duration-300 ${headerBg}`}>
       <div className="max-w-7xl mx-auto px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 lg:h-16">
 
           {/* Logo */}
           <Link
             href="/"
-            className="text-lg tracking-[0.3em] uppercase font-light text-stone-900 hover:text-stone-600 transition-colors duration-300"
+            className={`text-lg tracking-[0.3em] uppercase transition-colors duration-300 ${brandColor} ${isTransparent ? 'font-normal' : 'font-light'}`}
             style={{ fontFamily: "var(--font-display)" }}
           >
             {d.header.brand}
@@ -67,7 +97,7 @@ export default function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-[11px] uppercase tracking-[0.2em] text-stone-500 hover:text-stone-900 font-light transition-colors duration-200"
+                className={`text-[11px] uppercase tracking-[0.2em] font-light transition-colors duration-300 ${navColor}`}
               >
                 {link.label}
               </Link>
@@ -79,7 +109,7 @@ export default function Header() {
             {/* Search */}
             <button
               aria-label={d.header.search}
-              className="text-stone-500 hover:text-stone-900 transition-colors duration-200"
+              className={`transition-colors duration-300 ${iconColor}`}
             >
               <svg
                 className="w-[18px] h-[18px]"
@@ -105,7 +135,7 @@ export default function Header() {
             <button
               onClick={toggleCart}
               aria-label={d.header.cart}
-              className="relative text-stone-500 hover:text-stone-900 transition-colors duration-200"
+              className={`relative transition-colors duration-300 ${iconColor}`}
             >
               <svg
                 className="w-[18px] h-[18px]"
@@ -130,7 +160,7 @@ export default function Header() {
             {/* Mobile Menu Button */}
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="lg:hidden text-stone-500 hover:text-stone-900 transition-colors ml-1"
+              className={`lg:hidden transition-colors duration-300 ml-1 ${iconColor}`}
               aria-label="Toggle menu"
             >
               {mobileMenuOpen ? (
@@ -163,7 +193,7 @@ export default function Header() {
             ))}
             {/* Language Toggle — mobile */}
             <div className="pt-2 border-t border-stone-100">
-              <LangToggle />
+              <LangToggle isMobile={true} />
             </div>
           </div>
         </div>

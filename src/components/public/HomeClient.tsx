@@ -10,7 +10,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useDictionary } from "@/hooks/useDictionary";
-import HeroSlider from "@/components/public/HeroSlider";
+import HeroImageFader from "@/components/public/HeroImageFader";
 import FeaturedCarousel from "@/components/public/FeaturedCarousel";
 import type { ProductCardData } from "@/components/public/ProductCard";
 
@@ -36,47 +36,46 @@ export default function HomeClient({ products }: HomeClientProps) {
   return (
     <>
       {/* ===== HERO ===== */}
-      <section className="bg-white">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 pt-4 pb-10 md:pt-10 md:pb-20 lg:pt-12 lg:pb-28">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
-            {/* Text */}
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.3em] text-stone-400 font-normal mb-8">
-                {d.hero.eyebrow}
-              </p>
-              <h1
-                className="text-4xl sm:text-5xl lg:text-[64px] font-light text-stone-900 leading-[1.1] tracking-tight mb-8"
-                style={{ fontFamily: "var(--font-display)" }}
+      <section className="relative w-full min-h-[85vh] lg:min-h-screen bg-stone-100 overflow-hidden">
+        {/* Background Image Fader */}
+        <HeroImageFader />
+        
+        {/* Scrim Overlay */}
+        <div className="absolute inset-0 bg-black/50 z-[5]"></div>
+        
+        {/* Text Overlay */}
+        <div className="relative z-10 w-full h-full min-h-[85vh] lg:min-h-screen flex flex-col justify-center max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-16">
+          <div className="max-w-2xl">
+            <p className="text-[11px] uppercase tracking-[0.3em] text-white font-normal mb-6 lg:mb-8 drop-shadow-sm">
+              {d.hero.eyebrow}
+            </p>
+            <h1
+              className="text-4xl sm:text-5xl lg:text-[64px] font-normal text-white leading-[1.1] tracking-tight mb-6 lg:mb-8 drop-shadow-md"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {heroLines.map((line, i) => (
+                <span key={i}>
+                  {line}
+                  {i < heroLines.length - 1 && <br />}
+                </span>
+              ))}
+            </h1>
+            <p className="text-base text-stone-100 font-light leading-relaxed max-w-xl mb-10 lg:mb-12">
+              {d.hero.desc}
+            </p>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6 lg:gap-8">
+              <Link
+                href="/katalog"
+                className="inline-flex justify-center items-center gap-3 px-8 py-4 bg-transparent border border-white text-white text-[11px] uppercase tracking-[0.2em] font-normal hover:bg-white hover:text-black transition-all duration-300 rounded-none w-full sm:w-auto"
               >
-                {heroLines.map((line, i) => (
-                  <span key={i}>
-                    {line}
-                    {i < heroLines.length - 1 && <br />}
-                  </span>
-                ))}
-              </h1>
-              <p className="text-base text-stone-400 font-light leading-relaxed max-w-md mb-12">
-                {d.hero.desc}
-              </p>
-              <div className="flex items-center gap-8">
-                <Link
-                  href="/katalog"
-                  className="inline-flex items-center gap-3 px-8 py-4 border border-stone-900 text-stone-900 text-[11px] uppercase tracking-[0.2em] font-normal hover:bg-stone-900 hover:text-white transition-all duration-300"
-                >
-                  {d.hero.cta}
-                </Link>
-                <Link
-                  href="#about"
-                  className="text-[11px] uppercase tracking-[0.2em] text-stone-400 font-light hover:text-stone-900 border-b border-stone-300 pb-0.5 transition-colors duration-300"
-                >
-                  {d.hero.story}
-                </Link>
-              </div>
-            </div>
-
-            {/* Hero Image Slider */}
-            <div className="relative aspect-square md:aspect-[4/5] w-full bg-stone-100 overflow-hidden">
-              <HeroSlider />
+                {d.hero.cta}
+              </Link>
+              <Link
+                href="#about"
+                className="text-[11px] uppercase tracking-[0.2em] text-stone-200 font-normal hover:text-white border-b border-stone-200 hover:border-white pb-0.5 transition-colors duration-300"
+              >
+                {d.hero.story}
+              </Link>
             </div>
           </div>
         </div>

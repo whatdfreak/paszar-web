@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import ProductDetailClient from "@/components/public/ProductDetailClient";
@@ -47,11 +45,25 @@ export default async function ProductDetailPage({
 
   const product = await prisma.product.findUnique({
     where: { slug },
-    include: { category: { select: { name: true, slug: true } } },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      description: true,
+      story: true,
+      price: true,
+      stock: true,
+      image: true,
+      isActive: true,
+      categoryId: true,
+      createdAt: true,
+      category: { select: { name: true, slug: true } },
+    },
   });
 
   // 404 jika tidak ditemukan atau tidak aktif
   if (!product || !product.isActive) notFound();
+
 
   // Related products — kategori sama, maks 4
   const related = await prisma.product.findMany({

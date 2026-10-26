@@ -3,10 +3,12 @@ import { z } from "zod";
 // ── Item dalam keranjang ──────────────────────────────────────
 const CheckoutItemSchema = z.object({
   productId: z.string().cuid("productId tidak valid."),
-  productName: z.string().min(1, "productName tidak boleh kosong."),
+  productName: z.string().min(1, "productName tidak boleh kosong.").max(200),
   productPrice: z.coerce.number().int().min(0, "productPrice tidak valid."),
-  quantity: z.coerce.number().int().min(1, "quantity minimal 1."),
+  // max 99 per item — mencegah exploitation; validasi stok sesungguhnya ada di server
+  quantity: z.coerce.number().int().min(1, "quantity minimal 1.").max(99, "Maksimal 99 item per produk."),
 });
+
 
 // ── Payload checkout dari pengunjung ─────────────────────────
 export const CheckoutSchema = z.object({
@@ -27,7 +29,9 @@ export const CheckoutSchema = z.object({
   notes: z.string().max(500).optional(),
   items: z
     .array(CheckoutItemSchema)
-    .min(1, "Keranjang tidak boleh kosong."),
+    .min(1, "Keranjang tidak boleh kosong.")
+    .max(20, "Keranjang tidak boleh melebihi 20 jenis produk."),
+
 });
 
 export type CheckoutInput = z.infer<typeof CheckoutSchema>;

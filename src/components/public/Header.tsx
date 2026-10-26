@@ -45,7 +45,7 @@ export default function Header() {
     { label: d.header.nav.about, href: "/#about" },
   ];
 
-  const LangToggle = ({ isMobile = false }) => {
+  const renderLangToggle = (isMobile = false) => {
     const textColor = isTransparent && !isMobile ? "text-white hover:text-stone-300" : "text-stone-400 hover:text-stone-700";
     const activeColor = isTransparent && !isMobile ? "text-white font-semibold" : "text-stone-900 font-semibold";
     const dividerColor = isTransparent && !isMobile ? "text-white/50" : "text-stone-300";
@@ -129,7 +129,7 @@ export default function Header() {
 
             {/* Language Toggle — desktop */}
             <div className="hidden sm:block">
-              <LangToggle />
+              {renderLangToggle()}
             </div>
 
             {/* Cart */}
@@ -194,7 +194,7 @@ export default function Header() {
             ))}
             {/* Language Toggle — mobile */}
             <div className="pt-2 border-t border-stone-100">
-              <LangToggle isMobile={true} />
+              {renderLangToggle(true)}
             </div>
           </div>
         </div>

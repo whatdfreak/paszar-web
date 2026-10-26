@@ -1,7 +1,22 @@
 "use server";
 
+// ============================================================
+// PASzar — Product Server Actions
+// ============================================================
+// AUDIT v2 — Backend Hardening:
+//   ✅ Session guard pada SETIAP action (requireSession)
+//   ✅ Zod validation pada create & update
+//   ✅ deleteProduct: Pre-flight check riwayat pesanan
+//      → Jika produk pernah dibeli: SOFT-DELETE (isActive: false)
+//        untuk menjaga integritas data OrderItem historis
+//      → Jika belum pernah dibeli: HARD-DELETE aman
+//   ✅ Revalidate paths mencakup semua halaman relevan
+//   ✅ Slug collision handling pada create & update
+// ============================================================
+
 import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,6 +25,9 @@ import {
   type CreateProductInput,
   type UpdateProductInput,
 } from "@/validations/product.schema";
+
+// CUID validator — digunakan untuk semua ID parameter
+const cuidSchema = z.string().cuid("ID tidak valid.");
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -32,9 +50,15 @@ async function requireSession() {
   return session;
 }
 
-const PATHS = ["/dashboard/produk", "/katalog", "/kelola-produk"];
-function revalidateAll() {
-  PATHS.forEach((p) => revalidatePath(p));
+// Revalidate semua halaman yang menampilkan data produk
+const PRODUCT_PATHS = [
+  "/dashboard",
+  "/dashboard/produk",
+  "/katalog",
+];
+
+function revalidateProductPaths() {
+  PRODUCT_PATHS.forEach((p) => revalidatePath(p));
 }
 
 // ── Create Product ────────────────────────────────────────────
@@ -53,17 +77,17 @@ export async function createProduct(
     const { name, description, story, price, stock, categoryId, image, isActive } =
       parsed.data;
 
-    // Buat slug unik — tambahkan suffix angka jika clash.
+    // Slug collision resolution: tambahkan timestamp suffix jika clash
     let slug = toSlug(name);
     const clash = await prisma.product.findUnique({ where: { slug } });
-    if (clash) slug = slug + "-" + Date.now();
+    if (clash) slug = `${slug}-${Date.now()}`;
 
     const product = await prisma.product.create({
       data: { name, slug, description, story, price, stock, categoryId, image, isActive },
       select: { id: true, name: true, slug: true },
     });
 
-    revalidateAll();
+    revalidateProductPaths();
     return { success: true, data: product };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
@@ -96,7 +120,7 @@ export async function updateProduct(
       const clash = await prisma.product.findFirst({
         where: { slug, NOT: { id } },
       });
-      if (clash) slug = slug + "-" + Date.now();
+      if (clash) slug = `${slug}-${Date.now()}`;
       updateData.name = name;
       updateData.slug = slug;
     }
@@ -107,11 +131,20 @@ export async function updateProduct(
       select: { id: true, name: true, slug: true },
     });
 
-    revalidateAll();
+    revalidateProductPaths();
     return { success: true, data: product };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return { success: false, error: "Unauthorized: Silakan login kembali." };
+    }
+    // Produk tidak ditemukan (P2025)
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code: string }).code === "P2025"
+    ) {
+      return { success: false, error: "Produk tidak ditemukan." };
     }
     console.error("[updateProduct]", err);
     return { success: false, error: "Terjadi kesalahan saat memperbarui produk." };
@@ -119,33 +152,68 @@ export async function updateProduct(
 }
 
 // ── Delete Product ────────────────────────────────────────────
+//
+// INTEGRITAS DATA — Strategi "Smart Delete":
+//
+// Produk yang sudah pernah dibeli memiliki relasi ke OrderItem.
+// Skema menggunakan onDelete: Restrict pada relasi Product → OrderItem,
+// artinya hard-delete akan gagal (P2003) untuk produk yang sudah dipesan.
+//
+// Strategi yang diterapkan:
+//   1. Pre-flight: Cek apakah produk memiliki riwayat pesanan.
+//   2. Ada riwayat → SOFT-DELETE: set isActive: false.
+//      → Data pesanan historis tetap utuh.
+//      → Produk tidak lagi tampil di katalog publik.
+//      → Admin mendapat pesan informatif (bukan error).
+//   3. Tidak ada riwayat → HARD-DELETE: hapus permanen.
 
 export async function deleteProduct(
   id: string
-): Promise<ActionResult<{ id: string }>> {
+): Promise<ActionResult<{ id: string; softDeleted?: boolean }>> {
   try {
     await requireSession();
 
-    if (!id) return { success: false, error: "ID produk tidak valid." };
+    // Validasi format CUID sebelum menyentuh database
+    const idParsed = cuidSchema.safeParse(id);
+    if (!idParsed.success) return { success: false, error: "ID produk tidak valid." };
 
-    await prisma.product.delete({ where: { id } });
+    // ── Pre-flight: Cek riwayat pesanan ─────────────────────────
+    const orderItemCount = await prisma.orderItem.count({
+      where: { productId: idParsed.data },
+    });
 
-    revalidateAll();
-    return { success: true, data: { id } };
+    if (orderItemCount > 0) {
+      // SOFT-DELETE: Produk pernah dibeli — jaga integritas data historis
+      await prisma.product.update({
+        where: { id: idParsed.data },
+        data: { isActive: false },
+      });
+
+      revalidateProductPaths();
+      return {
+        success: true,
+        data: { id: idParsed.data, softDeleted: true },
+      };
+    }
+
+    // HARD-DELETE: Produk belum pernah dibeli — aman untuk dihapus
+    await prisma.product.delete({ where: { id: idParsed.data } });
+
+    revalidateProductPaths();
+    return { success: true, data: { id: idParsed.data, softDeleted: false } };
+
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return { success: false, error: "Unauthorized: Silakan login kembali." };
     }
+    // Produk tidak ditemukan (P2025)
     if (
       typeof err === "object" &&
       err !== null &&
       "code" in err &&
-      (err as { code: string }).code === "P2003"
+      (err as { code: string }).code === "P2025"
     ) {
-      return {
-        success: false,
-        error: "Produk tidak dapat dihapus karena terdapat pada data pesanan.",
-      };
+      return { success: false, error: "Produk tidak ditemukan." };
     }
     console.error("[deleteProduct]", err);
     return { success: false, error: "Terjadi kesalahan saat menghapus produk." };
@@ -160,22 +228,25 @@ export async function toggleProductActive(
   try {
     await requireSession();
 
-    if (!id) return { success: false, error: "ID produk tidak valid." };
+    // Validasi format CUID
+    const idParsed = cuidSchema.safeParse(id);
+    if (!idParsed.success) return { success: false, error: "ID produk tidak valid." };
+
 
     const current = await prisma.product.findUnique({
-      where: { id },
+      where: { id: idParsed.data },
       select: { isActive: true },
     });
 
     if (!current) return { success: false, error: "Produk tidak ditemukan." };
 
     const updated = await prisma.product.update({
-      where: { id },
+      where: { id: idParsed.data },
       data: { isActive: !current.isActive },
       select: { id: true, isActive: true },
     });
 
-    revalidateAll();
+    revalidateProductPaths();
     return { success: true, data: updated };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {

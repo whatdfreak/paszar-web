@@ -2,6 +2,7 @@
 
 import { getServerSession } from "next-auth";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
@@ -10,6 +11,10 @@ import {
   type CreateCategoryInput,
   type UpdateCategoryInput,
 } from "@/validations/category.schema";
+
+// CUID validator
+const cuidSchema = z.string().cuid("ID tidak valid.");
+
 
 // ── Helpers ───────────────────────────────────────────────────
 
@@ -131,13 +136,15 @@ export async function deleteCategory(
   try {
     await requireSession();
 
-    if (!id) return { success: false, error: "ID kategori tidak valid." };
+    // Validasi format CUID sebelum menyentuh database
+    const idParsed = cuidSchema.safeParse(id);
+    if (!idParsed.success) return { success: false, error: "ID kategori tidak valid." };
 
     // Prisma akan throw P2003 (FK constraint) jika masih ada produk.
-    await prisma.category.delete({ where: { id } });
+    await prisma.category.delete({ where: { id: idParsed.data } });
 
     revalidateAll();
-    return { success: true, data: { id } };
+    return { success: true, data: { id: idParsed.data } };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
       return { success: false, error: "Unauthorized: Silakan login kembali." };

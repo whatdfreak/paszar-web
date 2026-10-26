@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 interface PriceSliderProps {
   minPrice: number;
@@ -18,11 +18,16 @@ export default function PriceSlider({
   const [localMin, setLocalMin] = useState(minPrice);
   const [localMax, setLocalMax] = useState(maxPrice);
 
+  const [prevMin, setPrevMin] = useState(minPrice);
+  const [prevMax, setPrevMax] = useState(maxPrice);
+
   // Sync local state when the filter is cleared or changed externally
-  useEffect(() => {
+  if (minPrice !== prevMin || maxPrice !== prevMax) {
+    setPrevMin(minPrice);
+    setPrevMax(maxPrice);
     setLocalMin(minPrice);
     setLocalMax(maxPrice);
-  }, [minPrice, maxPrice]);
+  }
 
   const handleChange = (type: "min" | "max", val: number) => {
     if (type === "min") {

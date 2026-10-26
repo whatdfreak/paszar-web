@@ -66,6 +66,12 @@ export default function CheckoutModal() {
   const [orderCode, setOrderCode] = useState<string | null>(null);
   const [waUrl, setWaUrl] = useState<string | null>(null);
 
+  // Idempotency key — di-generate sekali per sesi modal
+  // Mencegah double-submit jika user klik dua kali atau network lag
+  const [idempotencyKey] = useState(() =>
+    typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36)
+  );
+
   if (!isCheckoutOpen) return null;
 
   const handleClose = () => {
@@ -99,7 +105,12 @@ export default function CheckoutModal() {
 
       const res = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          // Anti double-submit: server akan mengembalikan hasil yang sama
+          // jika key ini sudah pernah diproses (dalam 10 menit)
+          "X-Idempotency-Key": idempotencyKey,
+        },
         body: JSON.stringify(payload),
       });
 

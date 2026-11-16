@@ -58,9 +58,5 @@ export default async function EditProdukPage({ params }: Props) {
 
   if (!product) notFound();
 
-  return (
-    <div className="p-6 md:p-8">
-      <ProductFormClient categories={categories} product={product} />
-    </div>
-  );
+  return <ProductFormClient categories={categories} product={product} />;
 }

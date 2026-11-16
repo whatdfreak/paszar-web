@@ -1,182 +1,91 @@
 // ============================================================
 // PASzar — Dashboard Overview (Server Component)
 // ============================================================
-// AUDIT v2 — Backend Hardening:
-//   ✅ Revenue: aggregate HANYA dari pesanan aktif (PROCESSING/SHIPPED/COMPLETED)
-//   ✅ PENDING & CANCELLED dikecualikan dari perhitungan omzet
-//   ✅ Low Stock Alert: count produk dengan stock <= 5
-//   ✅ Recent Orders: take: 5, orderBy: createdAt desc
-//   ✅ Session check redundan sebagai defence-in-depth (middleware sudah guard)
-//   ✅ Semua query dijalankan paralel via Promise.all untuk efisiensi
+// Data 100% real-time dari PostgreSQL via Prisma (tanpa dummy data).
+// Auto-refresh di client menggunakan router.refresh() agar tetap
+// mematuhi arsitektur Next.js App Router (tanpa API route internal).
 // ============================================================
 
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
-import {
-  Package,
-  Tags,
-  ShoppingBag,
-  ArrowUpRight,
-  Activity,
-  CalendarDays,
-  TrendingUp,
-  AlertTriangle,
-} from "lucide-react";
+import Overview, {
+  type DailySalesPoint,
+  type TopProductItem,
+  type LowStockProductItem,
+  type RecentOrderItem,
+  type CategorySalesItem,
+  type OrderPipelineCount,
+} from "./Overview";
 
-// ── Revenue-contributing statuses ─────────────────────────────
-// PENDING  → belum pasti, tidak dihitung sebagai omzet
-// CANCELLED → gagal, tidak dihitung
-// PROCESSING / SHIPPED / COMPLETED → omzet nyata
+export const dynamic = "force-dynamic";
+
 const REVENUE_STATUSES: OrderStatus[] = [
   OrderStatus.PROCESSING,
   OrderStatus.SHIPPED,
   OrderStatus.COMPLETED,
 ];
 
-// ── Low Stock Threshold ───────────────────────────────────────
+const ACTION_NEEDED_STATUSES: OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.CONFIRMED,
+];
+
 const LOW_STOCK_THRESHOLD = 5;
 
-// ── Stat Card ─────────────────────────────────────────────────
-function StatCard({
-  label,
-  value,
-  unit,
-  icon: Icon,
-  accent = false,
-  alert = false,
-}: {
-  label: string;
-  value: string | number;
-  unit: string;
-  icon: React.ElementType;
-  accent?: boolean;
-  alert?: boolean;
-}) {
-  return (
-    <div
-      className={`rounded-lg border p-5 flex flex-col gap-3 shadow-[0_1px_2px_0_rgba(0,0,0,0.04),0_1px_6px_-1px_rgba(0,0,0,0.04)] ${
-        alert
-          ? "bg-amber-50 border-amber-200"
-          : accent
-          ? "bg-[#0B1C30] border-[#0B1C30]"
-          : "bg-white border-slate-200"
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <p
-          className={`text-[11px] font-semibold uppercase tracking-[0.08em] ${
-            alert
-              ? "text-amber-600"
-              : accent
-              ? "text-white/60"
-              : "text-slate-500"
-          }`}
-        >
-          {label}
-        </p>
-        <div
-          className={`w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 ${
-            alert
-              ? "bg-amber-100"
-              : accent
-              ? "bg-white/10"
-              : "bg-slate-50 border border-slate-100"
-          }`}
-        >
-          <Icon
-            size={15}
-            strokeWidth={2}
-            className={
-              alert ? "text-amber-600" : accent ? "text-white" : "text-[#0B1C30]"
-            }
-          />
-        </div>
-      </div>
-
-      <div className="flex items-baseline gap-1.5">
-        <span
-          className={`text-[28px] font-bold leading-none tracking-tight tabular-nums ${
-            alert
-              ? "text-amber-700"
-              : accent
-              ? "text-white"
-              : "text-slate-900"
-          }`}
-        >
-          {typeof value === "number" ? value.toLocaleString("id-ID") : value}
-        </span>
-        <span
-          className={`text-xs font-medium mb-0.5 ${
-            alert ? "text-amber-500" : accent ? "text-white/50" : "text-slate-400"
-          }`}
-        >
-          {unit}
-        </span>
-      </div>
-    </div>
-  );
+function toDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
-// ── Status Config ─────────────────────────────────────────────
-const statusConfig: Record<string, { label: string; dot: string; text: string }> = {
-  PENDING:    { label: "Pending",    dot: "bg-amber-400",   text: "text-amber-700"  },
-  CONFIRMED:  { label: "Confirmed",  dot: "bg-blue-500",    text: "text-blue-700"   },
-  PROCESSING: { label: "Processing", dot: "bg-violet-500",  text: "text-violet-700" },
-  SHIPPED:    { label: "Shipped",    dot: "bg-indigo-500",  text: "text-indigo-700" },
-  COMPLETED:  { label: "Completed",  dot: "bg-emerald-500", text: "text-emerald-700"},
-  CANCELLED:  { label: "Cancelled",  dot: "bg-red-400",     text: "text-red-600"    },
-};
-
-// ── Helpers ───────────────────────────────────────────────────
-function formatRupiah(amount: number): string {
-  if (amount >= 1_000_000) {
-    return `Rp ${(amount / 1_000_000).toFixed(1)}jt`;
-  }
-  if (amount >= 1_000) {
-    return `Rp ${(amount / 1_000).toFixed(0)}rb`;
-  }
-  return `Rp ${amount.toLocaleString("id-ID")}`;
+function formatShortDate(date: Date): string {
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+  });
 }
 
-// ── Page ──────────────────────────────────────────────────────
 export default async function DashboardPage() {
-  // Defence-in-depth: session check di page level
-  // (middleware sudah protect, ini lapisan kedua)
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  // ── Semua query dijalankan PARALEL untuk efisiensi ────────────
+  const now = new Date();
+  const startOf30Days = new Date(now);
+  startOf30Days.setDate(now.getDate() - 29);
+  startOf30Days.setHours(0, 0, 0, 0);
+
+  const startOf60Days = new Date(now);
+  startOf60Days.setDate(now.getDate() - 59);
+  startOf60Days.setHours(0, 0, 0, 0);
+
   const [
     productCount,
     categoryCount,
     orderCount,
     revenueAggregate,
     lowStockCount,
-    pendingOrderCount,
-    recentOrders,
+    lowStockProductsRaw,
+    statusGroups,
+    ordersLast60Days,
+    topOrderItems,
+    revenueOrderItems,
+    recentOrdersRaw,
+    actionOrdersRaw,
   ] = await Promise.all([
-    // Total produk aktif
     prisma.product.count({ where: { isActive: true } }),
-
-    // Total kategori
     prisma.category.count(),
-
-    // Total pesanan (semua status)
     prisma.order.count(),
 
-    // REVENUE: Aggregate HANYA pesanan dengan status aktif
-    // PENDING & CANCELLED dikecualikan — tidak merepresentasikan omzet nyata
     prisma.order.aggregate({
       where: { status: { in: REVENUE_STATUSES } },
       _sum: { totalAmount: true },
       _count: { id: true },
     }),
 
-    // LOW STOCK ALERT: Produk aktif dengan stok kritis (≤ threshold)
     prisma.product.count({
       where: {
         isActive: true,
@@ -184,12 +93,71 @@ export default async function DashboardPage() {
       },
     }),
 
-    // Pesanan pending yang butuh tindakan admin
-    prisma.order.count({
-      where: { status: OrderStatus.PENDING },
+    prisma.product.findMany({
+      where: {
+        isActive: true,
+        stock: { lte: LOW_STOCK_THRESHOLD },
+      },
+      orderBy: [{ stock: "asc" }, { updatedAt: "desc" }],
+      take: 5,
+      select: {
+        id: true,
+        name: true,
+        stock: true,
+        price: true,
+        image: true,
+        category: { select: { name: true } },
+      },
     }),
 
-    // Recent orders — take: 5, sorted by newest first
+    prisma.order.groupBy({
+      by: ["status"],
+      _count: { id: true },
+    }),
+
+    prisma.order.findMany({
+      where: {
+        createdAt: { gte: startOf60Days },
+        status: { in: REVENUE_STATUSES },
+      },
+      select: {
+        totalAmount: true,
+        createdAt: true,
+      },
+    }),
+
+    prisma.orderItem.groupBy({
+      by: ["productId"],
+      where: {
+        order: { status: { in: REVENUE_STATUSES } },
+      },
+      _sum: {
+        quantity: true,
+        subtotal: true,
+      },
+      orderBy: {
+        _sum: { quantity: "desc" },
+      },
+      take: 4,
+    }),
+
+    prisma.orderItem.findMany({
+      where: {
+        order: { status: { in: REVENUE_STATUSES } },
+      },
+      select: {
+        quantity: true,
+        subtotal: true,
+        product: {
+          select: {
+            category: {
+              select: { name: true },
+            },
+          },
+        },
+      },
+    }),
+
     prisma.order.findMany({
       take: 5,
       orderBy: { createdAt: "desc" },
@@ -197,254 +165,262 @@ export default async function DashboardPage() {
         id: true,
         orderCode: true,
         customerName: true,
+        customerPhone: true,
+        customerAddress: true,
+        customerCity: true,
+        customerProvince: true,
+        customerPostalCode: true,
+        notes: true,
         totalAmount: true,
         status: true,
         createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productName: true,
+            productPrice: true,
+            quantity: true,
+            subtotal: true,
+          },
+        },
+      },
+    }),
+
+    prisma.order.findMany({
+      where: {
+        status: {
+          in: [
+            OrderStatus.PENDING,
+            OrderStatus.CONFIRMED,
+            OrderStatus.PROCESSING,
+          ],
+        },
+      },
+      take: 5,
+      orderBy: { createdAt: "asc" },
+      select: {
+        id: true,
+        orderCode: true,
+        customerName: true,
+        customerPhone: true,
+        customerAddress: true,
+        customerCity: true,
+        customerProvince: true,
+        customerPostalCode: true,
+        notes: true,
+        totalAmount: true,
+        status: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productName: true,
+            productPrice: true,
+            quantity: true,
+            subtotal: true,
+          },
+        },
       },
     }),
   ]);
 
-  const totalRevenue = revenueAggregate._sum.totalAmount ?? 0;
-  const completedOrderCount = revenueAggregate._count.id;
+  // ── Top Products lookup ──────────────────────────────────────
+  const topProductIds = topOrderItems.map((item) => item.productId);
+  const topProductRecords =
+    topProductIds.length > 0
+      ? await prisma.product.findMany({
+          where: { id: { in: topProductIds } },
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            stock: true,
+            image: true,
+            category: { select: { name: true } },
+          },
+        })
+      : [];
 
-  const hour = new Date().getHours();
+  const productMap = new Map(topProductRecords.map((p) => [p.id, p]));
+  const topProducts: TopProductItem[] = topOrderItems
+    .map((item) => {
+      const product = productMap.get(item.productId);
+      if (!product) return null;
+      return {
+        id: product.id,
+        name: product.name,
+        categoryName: product.category.name,
+        price: product.price,
+        stock: product.stock,
+        image: product.image,
+        sold: item._sum.quantity ?? 0,
+        revenue: item._sum.subtotal ?? 0,
+      };
+    })
+    .filter((item): item is TopProductItem => item !== null);
+
+  // ── Daily Sales Series (30 hari terakhir) & Period Comparison ─
+  const dailyMap = new Map<string, { revenue: number; orders: number }>();
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    dailyMap.set(toDateKey(d), { revenue: 0, orders: 0 });
+  }
+
+  let current30Revenue = 0;
+  let previous30Revenue = 0;
+
+  for (const order of ordersLast60Days) {
+    if (order.createdAt >= startOf30Days) {
+      current30Revenue += order.totalAmount;
+      const key = toDateKey(order.createdAt);
+      const existing = dailyMap.get(key);
+      if (existing) {
+        existing.revenue += order.totalAmount;
+        existing.orders += 1;
+      }
+    } else {
+      previous30Revenue += order.totalAmount;
+    }
+  }
+
+  const dailySales30: DailySalesPoint[] = Array.from(dailyMap.entries()).map(
+    ([dateKey, stats]) => {
+      const [y, m, d] = dateKey.split("-").map(Number);
+      const dateObj = new Date(y, m - 1, d);
+      return {
+        date: dateKey,
+        label: formatShortDate(dateObj),
+        revenue: stats.revenue,
+        orders: stats.orders,
+      };
+    }
+  );
+
+  // ── Category Sales Breakdown ─────────────────────────────────
+  const categoryMap = new Map<string, { revenue: number; units: number }>();
+  for (const item of revenueOrderItems) {
+    const catName = item.product.category.name;
+    const current = categoryMap.get(catName) ?? { revenue: 0, units: 0 };
+    current.revenue += item.subtotal;
+    current.units += item.quantity;
+    categoryMap.set(catName, current);
+  }
+  const categorySales: CategorySalesItem[] = Array.from(categoryMap.entries())
+    .map(([name, val]) => ({
+      name,
+      revenue: val.revenue,
+      units: val.units,
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 5);
+
+  // ── Pipeline Counts ──────────────────────────────────────────
+  const statusCountMap = new Map<OrderStatus, number>();
+  for (const group of statusGroups) {
+    statusCountMap.set(group.status, group._count.id);
+  }
+
+  const pendingOrderCount = ACTION_NEEDED_STATUSES.reduce(
+    (sum, status) => sum + (statusCountMap.get(status) ?? 0),
+    0
+  );
+
+  const pipelineCounts: OrderPipelineCount = {
+    PENDING: statusCountMap.get(OrderStatus.PENDING) ?? 0,
+    CONFIRMED: statusCountMap.get(OrderStatus.CONFIRMED) ?? 0,
+    PROCESSING: statusCountMap.get(OrderStatus.PROCESSING) ?? 0,
+    SHIPPED: statusCountMap.get(OrderStatus.SHIPPED) ?? 0,
+    COMPLETED: statusCountMap.get(OrderStatus.COMPLETED) ?? 0,
+    CANCELLED: statusCountMap.get(OrderStatus.CANCELLED) ?? 0,
+  };
+
+  // ── Serialization ────────────────────────────────────────────
+  const totalRevenue = revenueAggregate._sum.totalAmount ?? 0;
+  const revenueOrderCount = revenueAggregate._count.id;
+  const averageOrderValue =
+    revenueOrderCount > 0 ? Math.round(totalRevenue / revenueOrderCount) : 0;
+
+  const revenueGrowthPct =
+    previous30Revenue > 0
+      ? Math.round(
+          ((current30Revenue - previous30Revenue) / previous30Revenue) * 100
+        )
+      : null;
+
+  const lowStockProducts: LowStockProductItem[] = lowStockProductsRaw.map(
+    (p) => ({
+      id: p.id,
+      name: p.name,
+      stock: p.stock,
+      price: p.price,
+      image: p.image,
+      categoryName: p.category.name,
+    })
+  );
+
+  const recentOrders: RecentOrderItem[] = recentOrdersRaw.map((o) => ({
+    id: o.id,
+    orderCode: o.orderCode,
+    customerName: o.customerName,
+    customerPhone: o.customerPhone,
+    customerAddress: o.customerAddress,
+    customerCity: o.customerCity,
+    customerProvince: o.customerProvince,
+    customerPostalCode: o.customerPostalCode,
+    notes: o.notes,
+    totalAmount: o.totalAmount,
+    status: o.status,
+    itemCount: o.items.length,
+    createdAt: o.createdAt.toISOString(),
+    items: o.items,
+  }));
+
+  const actionOrders: RecentOrderItem[] = actionOrdersRaw.map((o) => ({
+    id: o.id,
+    orderCode: o.orderCode,
+    customerName: o.customerName,
+    customerPhone: o.customerPhone,
+    customerAddress: o.customerAddress,
+    customerCity: o.customerCity,
+    customerProvince: o.customerProvince,
+    customerPostalCode: o.customerPostalCode,
+    notes: o.notes,
+    totalAmount: o.totalAmount,
+    status: o.status,
+    itemCount: o.items.length,
+    createdAt: o.createdAt.toISOString(),
+    items: o.items,
+  }));
+
+  const hour = now.getHours();
   const greeting =
-    hour < 12 ? "Selamat pagi" : hour < 17 ? "Selamat siang" : "Selamat malam";
-  const firstName = session.user?.name?.split(" ")[0] ?? "Admin";
+    hour < 12 ? "Selamat Pagi" : hour < 17 ? "Selamat Siang" : "Selamat Malam";
+  const adminName = session.user?.name?.split(" ")[0] ?? "Admin";
 
   return (
-    <div className="min-h-screen bg-slate-50 p-6 lg:p-8">
-
-      {/* ── Page Header ── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end pb-6 mb-6 border-b border-slate-200 gap-3">
-        <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-[0.08em] mb-1">
-            Admin Dashboard
-          </p>
-          <h1 className="text-2xl font-bold text-slate-900 tracking-tight leading-none">
-            {greeting}, {firstName}.
-          </h1>
-          <p className="text-sm text-slate-500 mt-1.5">
-            Berikut ringkasan kinerja toko Anda hari ini.
-          </p>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-white border border-slate-200 rounded-md px-3 py-2 shadow-[0_1px_2px_0_rgba(0,0,0,0.04)] flex-shrink-0">
-          <CalendarDays size={13} strokeWidth={2} className="text-slate-400" />
-          {new Date().toLocaleDateString("id-ID", {
-            weekday: "short",
-            day: "numeric",
-            month: "short",
-            year: "numeric",
-          })}
-        </div>
-      </div>
-
-      {/* ── Alert Banner: Low Stock ── */}
-      {lowStockCount > 0 && (
-        <div className="mb-5 flex items-center gap-3 p-4 rounded-lg bg-amber-50 border border-amber-200">
-          <AlertTriangle size={16} className="text-amber-500 flex-shrink-0" strokeWidth={2} />
-          <p className="text-[13px] text-amber-800">
-            <span className="font-bold">{lowStockCount} produk</span> memiliki stok kritis
-            (≤ {LOW_STOCK_THRESHOLD} unit). Segera perbarui stok.
-          </p>
-          <Link
-            href="/dashboard/produk"
-            className="ml-auto text-[12px] font-bold text-amber-700 border border-amber-300 rounded-md px-3 py-1.5 hover:bg-amber-100 transition-colors whitespace-nowrap flex-shrink-0"
-          >
-            Kelola Produk →
-          </Link>
-        </div>
-      )}
-
-      {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {/* Revenue Card — accent style */}
-        <div className="col-span-2 lg:col-span-1">
-          <StatCard
-            label="Total Omzet"
-            value={formatRupiah(totalRevenue)}
-            unit={`dari ${completedOrderCount} pesanan`}
-            icon={TrendingUp}
-            accent={true}
-          />
-        </div>
-        <StatCard
-          label="Produk Aktif"
-          value={productCount}
-          unit="produk"
-          icon={Package}
-        />
-        <StatCard
-          label="Total Pesanan"
-          value={orderCount}
-          unit="pesanan"
-          icon={ShoppingBag}
-        />
-        {lowStockCount > 0 ? (
-          <StatCard
-            label="Stok Kritis"
-            value={lowStockCount}
-            unit={`≤ ${LOW_STOCK_THRESHOLD} unit`}
-            icon={AlertTriangle}
-            alert={true}
-          />
-        ) : (
-          <StatCard
-            label="Kategori"
-            value={categoryCount}
-            unit="kategori"
-            icon={Tags}
-          />
-        )}
-      </div>
-
-      {/* ── Split Layout ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        {/* ── Recent Transactions ── */}
-        <div className="lg:col-span-2 bg-white rounded-lg border border-slate-200 overflow-hidden shadow-[0_1px_2px_0_rgba(0,0,0,0.04),0_1px_6px_-1px_rgba(0,0,0,0.04)] flex flex-col">
-          <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-200">
-            <div>
-              <h2 className="text-sm font-semibold text-slate-900">Transaksi Terbaru</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                {recentOrders.length} pesanan terbaru
-              </p>
-            </div>
-            <Link
-              href="/dashboard/pesanan"
-              className="text-[11px] font-semibold text-[#0B1C30] border border-slate-200 rounded-md px-3 py-1.5 hover:bg-slate-50 transition-colors"
-            >
-              Lihat semua
-            </Link>
-          </div>
-
-          <div className="flex-1 overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b-2 border-slate-200">
-                  <th className="px-5 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-[0.08em] whitespace-nowrap">
-                    Kode Pesanan
-                  </th>
-                  <th className="px-5 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-[0.08em]">
-                    Pelanggan
-                  </th>
-                  <th className="px-5 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-[0.08em] hidden md:table-cell">
-                    Tanggal
-                  </th>
-                  <th className="px-5 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-[0.08em] text-right">
-                    Total
-                  </th>
-                  <th className="px-5 py-2.5 text-[10px] font-bold text-slate-500 uppercase tracking-[0.08em] text-right">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-slate-100">
-                {recentOrders.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-10 text-center text-sm text-slate-400">
-                      Belum ada pesanan.
-                    </td>
-                  </tr>
-                ) : (
-                  recentOrders.map((order) => {
-                    const s = statusConfig[order.status] ?? {
-                      label: order.status,
-                      dot: "bg-slate-400",
-                      text: "text-slate-600",
-                    };
-                    return (
-                      <tr
-                        key={order.id}
-                        className="hover:bg-slate-50/60 transition-colors duration-100"
-                      >
-                        <td className="px-5 py-3 text-[11px] font-mono font-medium text-slate-500 whitespace-nowrap">
-                          {order.orderCode}
-                        </td>
-                        <td className="px-5 py-3 text-sm font-medium text-slate-900 max-w-[140px] truncate">
-                          {order.customerName}
-                        </td>
-                        <td className="px-5 py-3 text-xs text-slate-400 whitespace-nowrap hidden md:table-cell">
-                          {order.createdAt.toLocaleDateString("id-ID", {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          })}
-                        </td>
-                        <td className="px-5 py-3 text-sm font-semibold text-slate-900 text-right tabular-nums whitespace-nowrap">
-                          Rp{order.totalAmount.toLocaleString("id-ID")}
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <span
-                            className={`inline-flex items-center gap-1.5 text-[11px] font-semibold ${s.text}`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
-                            {s.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* ── Quick Actions Panel ── */}
-        <div className="lg:col-span-1 bg-white rounded-lg border border-slate-200 shadow-[0_1px_2px_0_rgba(0,0,0,0.04),0_1px_6px_-1px_rgba(0,0,0,0.04)] flex flex-col overflow-hidden">
-          <div className="px-5 py-3.5 border-b border-slate-200 flex items-center gap-2">
-            <Activity size={14} strokeWidth={2} className="text-[#0B1C30]" />
-            <h2 className="text-sm font-semibold text-slate-900">Ringkasan Status</h2>
-          </div>
-
-          <div className="flex-1 p-5 flex flex-col gap-3">
-            {/* Pending action counter */}
-            {pendingOrderCount > 0 && (
-              <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-3">
-                <div className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[12px] font-bold text-amber-800">
-                    {pendingOrderCount} pesanan menunggu
-                  </p>
-                  <p className="text-[11px] text-amber-600">Perlu konfirmasi admin</p>
-                </div>
-                <Link
-                  href="/dashboard/pesanan"
-                  className="flex-shrink-0 text-[11px] font-bold text-amber-700 hover:underline"
-                >
-                  Cek →
-                </Link>
-              </div>
-            )}
-
-            {/* Quick links */}
-            <div className="space-y-2 mt-1">
-              {[
-                { label: "Tambah Produk Baru", href: "/dashboard/produk/baru", icon: Package },
-                { label: "Kelola Kategori", href: "/dashboard/kategori", icon: Tags },
-                { label: "Semua Pesanan", href: "/dashboard/pesanan", icon: ShoppingBag },
-              ].map(({ label, href, icon: Icon }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group"
-                >
-                  <div className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center flex-shrink-0 group-hover:bg-[#0B1C30]/[0.06] transition-colors">
-                    <Icon size={13} className="text-slate-500 group-hover:text-[#0B1C30]" strokeWidth={2} />
-                  </div>
-                  <span className="text-[13px] font-medium text-slate-600 group-hover:text-slate-900 transition-colors">
-                    {label}
-                  </span>
-                  <ArrowUpRight size={13} className="ml-auto text-slate-300 group-hover:text-slate-500 transition-colors" />
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </div>
+    <Overview
+      greeting={greeting}
+      adminName={adminName}
+      lastSyncedAt={now.toISOString()}
+      totalRevenue={totalRevenue}
+      current30Revenue={current30Revenue}
+      revenueGrowthPct={revenueGrowthPct}
+      averageOrderValue={averageOrderValue}
+      revenueOrderCount={revenueOrderCount}
+      orderCount={orderCount}
+      pendingOrderCount={pendingOrderCount}
+      productCount={productCount}
+      categoryCount={categoryCount}
+      lowStockCount={lowStockCount}
+      lowStockThreshold={LOW_STOCK_THRESHOLD}
+      dailySales30={dailySales30}
+      pipelineCounts={pipelineCounts}
+      categorySales={categorySales}
+      topProducts={topProducts}
+      lowStockProducts={lowStockProducts}
+      recentOrders={recentOrders}
+      actionOrders={actionOrders}
+    />
   );
 }

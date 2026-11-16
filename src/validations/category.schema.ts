@@ -4,10 +4,20 @@ import { z } from "zod";
 export const CreateCategorySchema = z.object({
   name: z
     .string()
-    .min(2, "Nama minimal 2 karakter.")
-    .max(80, "Nama maksimal 80 karakter."),
-  description: z.string().max(500, "Deskripsi maksimal 500 karakter.").optional(),
-  sortOrder: z.coerce.number().int().min(0).default(0),
+    .trim()
+    .min(2, "Nama kategori minimal 2 karakter.")
+    .max(80, "Nama kategori maksimal 80 karakter."),
+  description: z
+    .string()
+    .trim()
+    .max(500, "Deskripsi maksimal 500 karakter.")
+    .optional(),
+  sortOrder: z.coerce
+    .number()
+    .int("Urutan tampil harus bilangan bulat.")
+    .min(1, "Urutan tampil minimal 1.")
+    .max(1000, "Urutan tampil maksimal 1000.")
+    .default(1),
 });
 
 // ── Update (partial) ─────────────────────────────────────────

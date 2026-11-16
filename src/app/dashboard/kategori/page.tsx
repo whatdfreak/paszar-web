@@ -38,9 +38,5 @@ async function getAllCategories() {
 export default async function KategoriPage() {
   const categories = await getAllCategories();
 
-  return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto">
-      <CategoryManagerClient initialCategories={categories} />
-    </div>
-  );
+  return <CategoryManagerClient initialCategories={categories} />;
 }

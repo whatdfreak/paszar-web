@@ -12,6 +12,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import { useAdminI18n } from "@/lib/admin-i18n";
 import {
   LayoutDashboard,
   Package,
@@ -22,6 +23,7 @@ import {
   PanelLeftOpen,
   X,
   Building,
+  Settings,
 } from "lucide-react";
 
 interface NavItem {
@@ -29,28 +31,6 @@ interface NavItem {
   href: string;
   icon: React.ElementType;
 }
-
-const navGroups = [
-  {
-    groupLabel: "General",
-    items: [
-      { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
-    ] as NavItem[],
-  },
-  {
-    groupLabel: "Catalog",
-    items: [
-      { label: "Products", href: "/dashboard/produk", icon: Package },
-      { label: "Categories", href: "/dashboard/kategori", icon: Tags },
-    ] as NavItem[],
-  },
-  {
-    groupLabel: "Sales",
-    items: [
-      { label: "Orders", href: "/dashboard/pesanan", icon: ShoppingBag },
-    ] as NavItem[],
-  },
-];
 
 // ── Tooltip Component (White Theme) ───────────────────────────
 function Tooltip({ label }: { label: string }) {
@@ -71,14 +51,17 @@ function NavLink({
   item,
   isActive,
   collapsed,
+  badgeCount,
   onClick,
 }: {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
+  badgeCount?: number;
   onClick?: () => void;
 }) {
   const Icon = item.icon;
+  const showBadge = typeof badgeCount === "number" && badgeCount > 0;
   return (
     <div className="relative group flex items-center">
       <Link
@@ -97,24 +80,39 @@ function NavLink({
         {isActive && !collapsed && (
           <span className="absolute left-0 top-1 bottom-1 w-0.5 rounded-full bg-[#0B1C30]" />
         )}
-        
-        <Icon
-          size={18}
-          strokeWidth={isActive ? 2.5 : 2}
-          className={`flex-shrink-0 transition-colors ${isActive ? "text-[#0B1C30]" : "text-slate-400"}`}
-        />
-        
+
+        <div className="relative flex-shrink-0">
+          <Icon
+            size={18}
+            strokeWidth={isActive ? 2.5 : 2}
+            className={`transition-colors ${isActive ? "text-[#0B1C30]" : "text-slate-400"}`}
+          />
+          {collapsed && showBadge && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-orange-500 ring-2 ring-white" />
+          )}
+        </div>
+
         {/* Trik Teks Animasi: Memainkan Max-Width & Opacity */}
         <span
           className={`whitespace-nowrap transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] ${
-            collapsed ? "max-w-0 opacity-0 ml-0" : "max-w-[200px] opacity-100 ml-3"
+            collapsed ? "max-w-0 opacity-0 ml-0" : "max-w-[200px] opacity-100 ml-3 flex-1"
           }`}
         >
           {item.label}
         </span>
+
+        {!collapsed && showBadge && (
+          <span className="ml-auto px-1.5 py-0.5 rounded-full bg-orange-500 text-white text-[10px] font-bold leading-none tabular-nums">
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </span>
+        )}
       </Link>
 
-      {collapsed && <Tooltip label={item.label} />}
+      {collapsed && (
+        <Tooltip
+          label={showBadge ? `${item.label} (${badgeCount})` : item.label}
+        />
+      )}
     </div>
   );
 }
@@ -122,16 +120,43 @@ function NavLink({
 // ── Sidebar Content ───────────────────────────────────────────
 function SidebarContent({
   collapsed,
+  pendingOrderCount,
   onToggleCollapse,
   onClose,
+  onLogoutRequest,
 }: {
   collapsed: boolean;
+  pendingOrderCount?: number;
   onToggleCollapse?: () => void;
   onClose?: () => void;
+  onLogoutRequest: () => void;
 }) {
   const pathname = usePathname();
+  const { t } = useAdminI18n();
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
+
+  const dynamicNavGroups = [
+    {
+      groupLabel: t.sidebar.general,
+      items: [
+        { label: t.sidebar.overview, href: "/dashboard", icon: LayoutDashboard },
+      ] as NavItem[],
+    },
+    {
+      groupLabel: t.sidebar.catalog,
+      items: [
+        { label: t.sidebar.products, href: "/dashboard/produk", icon: Package },
+        { label: t.sidebar.categories, href: "/dashboard/kategori", icon: Tags },
+      ] as NavItem[],
+    },
+    {
+      groupLabel: t.sidebar.sales,
+      items: [
+        { label: t.sidebar.orders, href: "/dashboard/pesanan", icon: ShoppingBag },
+      ] as NavItem[],
+    },
+  ];
 
   return (
     <div className="flex flex-col h-full bg-white relative">
@@ -192,7 +217,7 @@ function SidebarContent({
       {/* ── Navigation List ── */}
       {/* Padding dipertahankan konsisten agar tidak ada lompatan layout */}
       <nav className="flex-1 py-4 overflow-x-hidden overflow-y-auto space-y-2 px-3">
-        {navGroups.map((group) => (
+        {dynamicNavGroups.map((group) => (
           <div key={group.groupLabel}>
             
             {/* Smooth Teks Label Group */}
@@ -222,6 +247,11 @@ function SidebarContent({
                   item={item}
                   isActive={isActive(item.href)}
                   collapsed={collapsed}
+                  badgeCount={
+                    item.href === "/dashboard/pesanan"
+                      ? pendingOrderCount
+                      : undefined
+                  }
                   onClick={onClose}
                 />
               ))}
@@ -230,14 +260,26 @@ function SidebarContent({
         ))}
       </nav>
 
-      {/* ── Footer / Logout ── */}
-      <div className="flex-shrink-0 border-t border-slate-100 p-3 flex justify-center">
+      {/* ── Footer: Settings & Logout ── */}
+      <div className="flex-shrink-0 border-t border-slate-100 p-3 space-y-1">
+        <NavLink
+          item={{
+            label: t.sidebar.settings,
+            href: "/dashboard/pengaturan",
+            icon: Settings,
+          }}
+          isActive={isActive("/dashboard/pengaturan")}
+          collapsed={collapsed}
+          onClick={onClose}
+        />
+
         <div className="relative group w-full flex justify-center">
           <button
-            onClick={() => signOut({ callbackUrl: "/login" })}
+            type="button"
+            onClick={onLogoutRequest}
             className={`
               relative flex items-center rounded-md transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] text-sm font-medium mx-auto overflow-hidden
-              text-slate-500 hover:text-red-600 hover:bg-red-50
+              text-slate-500 hover:text-rose-600 hover:bg-rose-50
               ${collapsed ? "w-10 h-10 justify-center px-0" : "w-full h-10 px-3"}
             `}
           >
@@ -247,10 +289,10 @@ function SidebarContent({
                 collapsed ? "max-w-0 opacity-0 ml-0" : "max-w-[200px] opacity-100 ml-3"
               }`}
             >
-              Log out
+              {t.sidebar.logout}
             </span>
           </button>
-          {collapsed && <Tooltip label="Log out" />}
+          {collapsed && <Tooltip label={t.sidebar.logout} />}
         </div>
       </div>
     </div>
@@ -258,9 +300,21 @@ function SidebarContent({
 }
 
 // ── Main Export ───────────────────────────────────────────────
-export function AdminSidebar() {
+export function AdminSidebar({
+  pendingOrderCount = 0,
+}: {
+  pendingOrderCount?: number;
+}) {
+  const { t } = useAdminI18n();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleConfirmLogout = async () => {
+    setIsLoggingOut(true);
+    await signOut({ callbackUrl: "/login" });
+  };
 
   return (
     <>
@@ -282,7 +336,7 @@ export function AdminSidebar() {
 
       {/* Mobile Drawer */}
       <aside
-        className={`md:hidden fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-slate-200 shadow-2xl transform transition-transform duration-300 ease-out ${
+        className={`md:hidden fixed inset-y-0 left-0 z-50 w-56 bg-white border-r border-slate-200 shadow-2xl transform transition-transform duration-300 ease-out ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -292,19 +346,68 @@ export function AdminSidebar() {
         >
           <X size={18} strokeWidth={2} />
         </button>
-        <SidebarContent collapsed={false} onClose={() => setIsMobileOpen(false)} />
+        <SidebarContent
+          collapsed={false}
+          pendingOrderCount={pendingOrderCount}
+          onClose={() => setIsMobileOpen(false)}
+          onLogoutRequest={() => {
+            setIsMobileOpen(false);
+            setShowLogoutModal(true);
+          }}
+        />
       </aside>
 
       {/* Desktop Sidebar (Master Container Width Animation) */}
       <aside
         className={`hidden md:flex md:flex-col flex-shrink-0 bg-white border-r border-slate-200 transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] h-screen sticky top-0
-          ${collapsed ? "w-[72px]" : "w-64"}`}
+          ${collapsed ? "w-[72px]" : "w-56"}`}
       >
         <SidebarContent
           collapsed={collapsed}
+          pendingOrderCount={pendingOrderCount}
           onToggleCollapse={() => setCollapsed((c) => !c)}
+          onLogoutRequest={() => setShowLogoutModal(true)}
         />
       </aside>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-[1px]"
+            onClick={isLoggingOut ? undefined : () => setShowLogoutModal(false)}
+          />
+          <div className="relative bg-white rounded-xl border border-slate-200 shadow-xl p-6 w-full max-w-sm animate-soft-enter">
+            <div className="flex items-center justify-center w-11 h-11 rounded-full bg-rose-50 mx-auto mb-4">
+              <LogOut size={20} className="text-rose-600" strokeWidth={2} />
+            </div>
+            <h3 className="text-[15px] font-bold text-slate-900 text-center mb-1.5">
+              {t.sidebar.logoutTitle}
+            </h3>
+            <p className="text-xs text-slate-500 text-center mb-5 leading-relaxed">
+              {t.sidebar.logoutDesc}
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={() => setShowLogoutModal(false)}
+                className="flex-1 h-9 rounded-lg border border-slate-200 text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                {t.sidebar.logoutCancel}
+              </button>
+              <button
+                type="button"
+                disabled={isLoggingOut}
+                onClick={handleConfirmLogout}
+                className="flex-1 h-9 rounded-lg bg-[#0B1C30] hover:bg-[#132944] text-xs font-medium text-white transition-colors disabled:opacity-50"
+              >
+                {isLoggingOut ? t.sidebar.loggingOut : t.sidebar.logoutConfirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

@@ -65,9 +65,5 @@ async function getAllOrders(): Promise<OrderRow[]> {
 export default async function PesananPage() {
   const orders = await getAllOrders();
 
-  return (
-    <div className="p-6 md:p-8 max-w-6xl mx-auto">
-      <OrdersManagerClient initialOrders={orders} />
-    </div>
-  );
+  return <OrdersManagerClient initialOrders={orders} />;
 }

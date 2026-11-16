@@ -24,9 +24,5 @@ async function getCategories() {
 
 export default async function TambahProdukPage() {
   const categories = await getCategories();
-  return (
-    <div className="p-6 md:p-8">
-      <ProductFormClient categories={categories} />
-    </div>
-  );
+  return <ProductFormClient categories={categories} />;
 }

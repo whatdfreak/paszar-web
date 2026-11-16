@@ -10,10 +10,22 @@
 // Jika edge case middleware bypass terjadi, redirect ke /login.
 // ============================================================
 
+import type { Metadata } from "next";
 import { getServerSession } from "next-auth";
 import { redirect } from "next/navigation";
+import { OrderStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { AdminI18nProvider } from "@/lib/admin-i18n";
+
+export const metadata: Metadata = {
+  robots: {
+    index: false,
+    follow: false,
+    nocache: true,
+  },
+};
 
 export default async function DashboardLayout({
   children,
@@ -24,18 +36,26 @@ export default async function DashboardLayout({
   const session = await getServerSession(authOptions);
   if (!session) redirect("/login");
 
-  return (
-    <div className="min-h-screen flex flex-row bg-slate-50">
-      {/* ── Sidebar ── */}
-      <AdminSidebar />
+  const pendingOrderCount = await prisma.order.count({
+    where: {
+      status: { in: [OrderStatus.PENDING, OrderStatus.CONFIRMED] },
+    },
+  });
 
-      {/* ── Main Content ── */}
-      <main className="flex-1 min-w-0 overflow-auto">
-        {/* Spacer untuk hamburger button di mobile */}
-        <div className="md:hidden h-14" aria-hidden="true" />
-        {children}
-      </main>
-    </div>
+  return (
+    <AdminI18nProvider>
+      <div className="min-h-screen flex flex-row bg-slate-50">
+        {/* ── Sidebar ── */}
+        <AdminSidebar pendingOrderCount={pendingOrderCount} />
+
+        {/* ── Main Content ── */}
+        <main className="flex-1 min-w-0 overflow-auto">
+          {/* Spacer untuk hamburger button di mobile */}
+          <div className="md:hidden h-14" aria-hidden="true" />
+          {children}
+        </main>
+      </div>
+    </AdminI18nProvider>
   );
 }
 

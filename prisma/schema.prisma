@@ -248,3 +248,19 @@ enum OrderStatus {
   PAYMENT_FAILED
   REFUNDED
 }
+
+// ================================================================
+// MODEL: StoreSetting (Singleton: id = "default")
+// ================================================================
+// Menyimpan konfigurasi toko yang dapat diubah langsung oleh admin
+// melalui dashboard /dashboard/pengaturan (tanpa perlu edit .env).
+
+model StoreSetting {
+  id               String   @id @default("default")
+  whatsappNumber   String   @map("whatsapp_number")
+  storeName        String   @default("PASzar Koperasi Lapas Kupang") @map("store_name")
+  operationalHours String   @default("Senin - Sabtu, 08.00 - 16.00 WITA") @map("operational_hours")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("store_settings")
+}

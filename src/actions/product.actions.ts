@@ -49,7 +49,7 @@ function toSlug(name: string): string {
 
 async function requireSession() {
   const session = await getServerSession(authOptions);
-  if (!session) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new Error("Unauthorized");
   return session;
 }
 
@@ -412,10 +412,55 @@ export async function uploadProductImage(
       };
     }
 
+    const filename = `${crypto.randomUUID()}.${ext}`;
+
+    // ── Storage driver: Supabase (production/serverless) ────────
+    // Aktif jika SUPABASE_URL + SUPABASE_SERVICE_KEY + SUPABASE_STORAGE_BUCKET diisi.
+    // SUPABASE_SERVICE_KEY hanya dipakai di server (aturan S2).
+    const sbUrl = process.env.SUPABASE_URL?.replace(/\/$/, "");
+    const sbKey = process.env.SUPABASE_SERVICE_KEY;
+    const sbBucket = process.env.SUPABASE_STORAGE_BUCKET;
+
+    if (sbUrl && sbKey && sbBucket) {
+      const objectPath = `products/${filename}`;
+      const res = await fetch(
+        `${sbUrl}/storage/v1/object/${encodeURIComponent(sbBucket)}/${objectPath}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${sbKey}`,
+            apikey: sbKey,
+            "Content-Type": file.type,
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "x-upsert": "false",
+          },
+          body: new Uint8Array(buffer),
+        }
+      );
+      if (!res.ok) {
+        console.error("[uploadProductImage] supabase", res.status);
+        return { success: false, error: "Gagal mengunggah gambar ke penyimpanan." };
+      }
+      return {
+        success: true,
+        data: {
+          url: `${sbUrl}/storage/v1/object/public/${encodeURIComponent(sbBucket)}/${objectPath}`,
+          sizeBytes: buffer.byteLength,
+        },
+      };
+    }
+
+    // ── Storage driver: disk lokal (VPS / development) ──────────
+    if (process.env.VERCEL) {
+      return {
+        success: false,
+        error:
+          "Penyimpanan gambar belum dikonfigurasi (SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_STORAGE_BUCKET).",
+      };
+    }
+
     const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
     await mkdir(uploadDir, { recursive: true });
-
-    const filename = `${crypto.randomUUID()}.${ext}`;
     await writeFile(path.join(uploadDir, filename), buffer);
 
     return {

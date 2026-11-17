@@ -45,7 +45,7 @@ export async function searchDashboard(
   rawQuery: string
 ): Promise<DashboardSearchResult> {
   const session = await getServerSession(authOptions);
-  if (!session) {
+  if (!session?.user?.id) {
     throw new Error("Unauthorized");
   }
 

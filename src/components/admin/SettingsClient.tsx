@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   updateAdminProfile,
   changeAdminPassword,
@@ -139,8 +140,11 @@ export default function SettingsClient({
         });
         setPwdMsg({
           type: "success",
-          text: "Password berhasil diubah. Gunakan password baru pada login berikutnya.",
+          text: "Password berhasil diubah. Demi keamanan, semua sesi login dicabut — Anda akan diarahkan ke halaman login.",
         });
+        window.setTimeout(() => {
+          void signOut({ callbackUrl: "/login" });
+        }, 2000);
       } else {
         setPwdMsg({ type: "error", text: res.error });
       }

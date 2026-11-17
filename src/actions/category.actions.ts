@@ -29,7 +29,7 @@ function toSlug(name: string): string {
 
 async function requireSession() {
   const session = await getServerSession(authOptions);
-  if (!session) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new Error("Unauthorized");
   return session;
 }
 

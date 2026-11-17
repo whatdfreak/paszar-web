@@ -34,7 +34,7 @@ export default async function DashboardLayout({
 }) {
   // ── Secondary session guard (defence-in-depth) ────────────
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
+  if (!session?.user?.id) redirect("/login");
 
   const pendingOrderCount = await prisma.order.count({
     where: {

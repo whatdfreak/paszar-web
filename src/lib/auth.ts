@@ -8,6 +8,7 @@
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
+import { createHash } from "node:crypto";
 import { prisma } from "@/lib/prisma";
 
 // ── Login Rate Limiter (in-memory, per instance) ─────────────
@@ -44,6 +45,10 @@ function recordLoginFailure(key: string): void {
 
 function clearLoginFailures(key: string): void {
   failedAttempts.delete(key);
+}
+
+function passwordFingerprint(hashedPassword: string): string {
+  return createHash("sha256").update(hashedPassword).digest("hex").slice(0, 24);
 }
 
 export const authOptions: NextAuthOptions = {
@@ -130,16 +135,37 @@ export const authOptions: NextAuthOptions = {
 
   // ── Callbacks ────────────────────────────────────────────
   callbacks: {
-    // Masukkan `id` ke dalam JWT token
+    // Masukkan `id` + sidik jari password ke dalam JWT token.
+    // Pada setiap pemanggilan, token divalidasi ulang terhadap DB sehingga
+    // sesi lama otomatis tidak berlaku setelah password diganti / admin dihapus.
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        const admin = await prisma.admin.findUnique({
+          where: { id: user.id },
+          select: { hashedPassword: true },
+        });
+        token.pv = admin ? passwordFingerprint(admin.hashedPassword) : "";
+        token.revoked = false;
+        return token;
+      }
+
+      if (typeof token.id === "string") {
+        const admin = await prisma.admin.findUnique({
+          where: { id: token.id },
+          select: { hashedPassword: true },
+        });
+        token.revoked =
+          !admin || passwordFingerprint(admin.hashedPassword) !== token.pv;
       }
       return token;
     },
 
-    // Expose `id` dari token ke session object
+    // Expose `id` dari token ke session object (kosongkan jika dicabut)
     async session({ session, token }) {
+      if (token.revoked) {
+        return { ...session, user: undefined };
+      }
       if (token && session.user) {
         session.user.id = token.id as string;
       }

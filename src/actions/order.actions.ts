@@ -6,8 +6,10 @@ import { z } from "zod";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { OrderStatus } from "@prisma/client";
-
-// ── Helpers ───────────────────────────────────────────────────
+import {
+  OrderBusinessError,
+  applyOrderStatusTransition,
+} from "@/lib/order-status";
 
 type ActionResult<T> =
   | { success: true; data: T }
@@ -17,11 +19,10 @@ const cuidSchema = z.string().cuid();
 
 async function requireSession() {
   const session = await getServerSession(authOptions);
-  if (!session) throw new Error("Unauthorized");
+  if (!session?.user?.id) throw new Error("Unauthorized");
   return session;
 }
 
-// ── Valid statuses (Fase 1 — WhatsApp flow) ────────────────────
 const VALID_STATUSES: OrderStatus[] = [
   OrderStatus.PENDING,
   OrderStatus.CONFIRMED,
@@ -31,38 +32,8 @@ const VALID_STATUSES: OrderStatus[] = [
   OrderStatus.CANCELLED,
 ];
 
-// ── Inventory State Classification ────────────────────────────
-//
-// "Stock-committed" = status di mana stok sudah dipotong dari DB.
-//
-//   PENDING / CONFIRMED  → stok BELUM dipotong
-//   PROCESSING           → TITIK PEMOTONGAN
-//   SHIPPED / COMPLETED  → stok sudah dipotong
-//   CANCELLED            → stok BELUM dipotong (atau sudah dikembalikan)
-//
-// Logika transisi:
-//   non-committed → committed  = DECREMENT stok (+ validasi kecukupan)
-//   committed → non-committed  = INCREMENT stok (pengembalian), termasuk
-//                                mundur ke PENDING/CONFIRMED/CANCELLED
-//   committed → committed      = hanya update status
-const STOCK_COMMITTED_STATUSES = new Set<OrderStatus>([
-  OrderStatus.PROCESSING,
-  OrderStatus.SHIPPED,
-  OrderStatus.COMPLETED,
-]);
-
-function isStockCommitted(status: OrderStatus): boolean {
-  return STOCK_COMMITTED_STATUSES.has(status);
-}
-
-class OrderBusinessError extends Error {}
-
 // ── Update Order Status ───────────────────────────────────────
-//
-// ACID-compliant via Prisma $transaction (isolation: Serializable).
-// Status order dibaca ULANG di dalam transaksi dan diupdate secara
-// kondisional (compare-and-set) sehingga dua request bersamaan tidak
-// dapat memotong / mengembalikan stok dua kali.
+// Logika stok ACID ada di lib/order-status.ts (teruji lewat skrip uji).
 
 export async function updateOrderStatus(
   orderId: string,
@@ -80,83 +51,10 @@ export async function updateOrderStatus(
       return { success: false, error: "Status pesanan tidak valid." };
     }
 
-    const targetStatus = newStatus as OrderStatus;
-
-    const updated = await prisma.$transaction(
-      async (tx) => {
-        const currentOrder = await tx.order.findUnique({
-          where: { id: idParsed.data },
-          select: {
-            status: true,
-            items: {
-              select: { productId: true, quantity: true, productName: true },
-            },
-          },
-        });
-
-        if (!currentOrder) {
-          throw new OrderBusinessError("Pesanan tidak ditemukan.");
-        }
-
-        const currentStatus = currentOrder.status;
-
-        if (currentStatus === targetStatus) {
-          return { id: idParsed.data, status: currentStatus };
-        }
-
-        const willCommitStock =
-          !isStockCommitted(currentStatus) && isStockCommitted(targetStatus);
-        const willRestoreStock =
-          isStockCommitted(currentStatus) && !isStockCommitted(targetStatus);
-
-        // Compare-and-set: hanya berhasil jika status belum berubah
-        const cas = await tx.order.updateMany({
-          where: { id: idParsed.data, status: currentStatus },
-          data: { status: targetStatus },
-        });
-        if (cas.count === 0) {
-          throw new OrderBusinessError(
-            "Status pesanan baru saja berubah. Muat ulang halaman lalu coba lagi."
-          );
-        }
-
-        if (willCommitStock) {
-          for (const item of currentOrder.items) {
-            // Decrement atomik dengan guard stok (tidak bisa negatif)
-            const res = await tx.product.updateMany({
-              where: { id: item.productId, stock: { gte: item.quantity } },
-              data: { stock: { decrement: item.quantity } },
-            });
-            if (res.count === 0) {
-              const product = await tx.product.findUnique({
-                where: { id: item.productId },
-                select: { stock: true, name: true },
-              });
-              if (!product) {
-                throw new OrderBusinessError(
-                  `Produk tidak ditemukan: ${item.productName}`
-                );
-              }
-              throw new OrderBusinessError(
-                `Stok tidak mencukupi untuk "${product.name}". ` +
-                  `Tersedia: ${product.stock}, dibutuhkan: ${item.quantity}.`
-              );
-            }
-          }
-        }
-
-        if (willRestoreStock) {
-          for (const item of currentOrder.items) {
-            await tx.product.updateMany({
-              where: { id: item.productId },
-              data: { stock: { increment: item.quantity } },
-            });
-          }
-        }
-
-        return { id: idParsed.data, status: targetStatus };
-      },
-      { isolationLevel: "Serializable" }
+    const updated = await applyOrderStatusTransition(
+      prisma,
+      idParsed.data,
+      newStatus as OrderStatus
     );
 
     revalidatePath("/dashboard");
@@ -174,26 +72,20 @@ export async function updateOrderStatus(
       return { success: false, error: err.message };
     }
 
-    // P2034: write conflict / serialization failure
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "code" in err &&
-      (err as { code: string }).code === "P2034"
-    ) {
-      return {
-        success: false,
-        error: "Pesanan sedang diproses permintaan lain. Silakan coba lagi.",
-      };
-    }
-
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "code" in err &&
-      (err as { code: string }).code === "P2025"
-    ) {
-      return { success: false, error: "Pesanan atau produk tidak ditemukan." };
+    if (typeof err === "object" && err !== null && "code" in err) {
+      const code = (err as { code: string }).code;
+      if (code === "P2034") {
+        return {
+          success: false,
+          error: "Pesanan sedang diproses permintaan lain. Silakan coba lagi.",
+        };
+      }
+      if (code === "P2025") {
+        return {
+          success: false,
+          error: "Pesanan atau produk tidak ditemukan.",
+        };
+      }
     }
 
     console.error("[updateOrderStatus]", err);

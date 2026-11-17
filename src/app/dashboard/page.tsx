@@ -51,7 +51,7 @@ function formatShortDate(date: Date): string {
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
-  if (!session) redirect("/login");
+  if (!session?.user?.id) redirect("/login");
 
   const now = new Date();
   const startOf30Days = new Date(now);

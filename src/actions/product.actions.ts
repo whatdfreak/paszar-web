@@ -263,7 +263,28 @@ export async function deleteProduct(
     }
 
     // HARD-DELETE: Produk belum pernah dibeli — aman untuk dihapus
-    await prisma.product.delete({ where: { id: idParsed.data } });
+    try {
+      await prisma.product.delete({ where: { id: idParsed.data } });
+    } catch (deleteErr: unknown) {
+      // P2003: ada pesanan baru yang merujuk produk ini (race) → soft-delete
+      if (
+        typeof deleteErr === "object" &&
+        deleteErr !== null &&
+        "code" in deleteErr &&
+        (deleteErr as { code: string }).code === "P2003"
+      ) {
+        await prisma.product.update({
+          where: { id: idParsed.data },
+          data: { isActive: false },
+        });
+        revalidateProductPaths();
+        return {
+          success: true,
+          data: { id: idParsed.data, softDeleted: true },
+        };
+      }
+      throw deleteErr;
+    }
 
     revalidateProductPaths();
     return { success: true, data: { id: idParsed.data, softDeleted: false } };

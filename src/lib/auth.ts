@@ -10,6 +10,42 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcrypt";
 import { prisma } from "@/lib/prisma";
 
+// ── Login Rate Limiter (in-memory, per instance) ─────────────
+// Catatan: pada deployment multi-instance/serverless gunakan store
+// terpusat (Redis/Upstash) agar limit berlaku global.
+const MAX_FAILED_ATTEMPTS = 5; // per kombinasi email + IP
+const MAX_FAILED_PER_IP = 20; // per IP (semua email)
+const LOCK_WINDOW_MS = 15 * 60 * 1000;
+const failedAttempts = new Map<string, { count: number; first: number }>();
+
+// Hash bcrypt valid (cost 12) untuk perbandingan dummy
+const DUMMY_HASH = bcrypt.hashSync("paszar-dummy-password", 12);
+
+function isLoginBlocked(key: string): boolean {
+  const entry = failedAttempts.get(key);
+  if (!entry) return false;
+  if (Date.now() - entry.first > LOCK_WINDOW_MS) {
+    failedAttempts.delete(key);
+    return false;
+  }
+  const limit = key.startsWith("ip:") ? MAX_FAILED_PER_IP : MAX_FAILED_ATTEMPTS;
+  return entry.count >= limit;
+}
+
+function recordLoginFailure(key: string): void {
+  const now = Date.now();
+  const entry = failedAttempts.get(key);
+  if (!entry || now - entry.first > LOCK_WINDOW_MS) {
+    failedAttempts.set(key, { count: 1, first: now });
+  } else {
+    entry.count += 1;
+  }
+}
+
+function clearLoginFailures(key: string): void {
+  failedAttempts.delete(key);
+}
+
 export const authOptions: NextAuthOptions = {
   // ── Session ──────────────────────────────────────────────
   session: {
@@ -37,15 +73,29 @@ export const authOptions: NextAuthOptions = {
         password: { label: "Password", type: "password" },
       },
 
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         // Validasi dasar — credentials wajib ada
         if (!credentials?.email || !credentials?.password) {
           return null;
         }
+        if (credentials.password.length > 200) return null;
 
-        // Cari admin berdasarkan email
-        const admin = await prisma.admin.findUnique({
-          where: { email: credentials.email },
+        const email = credentials.email.trim().toLowerCase();
+        const forwarded = req?.headers?.["x-forwarded-for"];
+        const ip =
+          (Array.isArray(forwarded) ? forwarded[0] : forwarded)
+            ?.split(",")[0]
+            ?.trim() ?? "unknown";
+        const rateKeys = [`email:${email}|${ip}`, `ip:${ip}`];
+
+        // Anti brute-force: blokir sementara setelah terlalu banyak gagal
+        if (rateKeys.some(isLoginBlocked)) {
+          return null;
+        }
+
+        // Cari admin berdasarkan email (case-insensitive)
+        const admin = await prisma.admin.findFirst({
+          where: { email: { equals: email, mode: "insensitive" } },
           select: {
             id: true,
             email: true,
@@ -54,20 +104,19 @@ export const authOptions: NextAuthOptions = {
           },
         });
 
-        // Admin tidak ditemukan
-        if (!admin) {
-          return null;
-        }
-
-        // Komparasi password dengan bcrypt
+        // Selalu jalankan bcrypt (hash dummy jika admin tidak ada)
+        // agar waktu respons sama → mencegah user enumeration via timing.
         const isPasswordValid = await bcrypt.compare(
           credentials.password,
-          admin.hashedPassword
+          admin?.hashedPassword ?? DUMMY_HASH
         );
 
-        if (!isPasswordValid) {
+        if (!admin || !isPasswordValid) {
+          rateKeys.forEach(recordLoginFailure);
           return null;
         }
+
+        rateKeys.forEach(clearLoginFailures);
 
         // Kembalikan objek user tanpa hashedPassword
         return {

@@ -20,10 +20,10 @@ interface StoreSettingRow {
 
 export default async function PengaturanPage() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) redirect("/login");
+  if (!session?.user?.id) redirect("/login");
 
   const admin = await prisma.admin.findUnique({
-    where: { email: session.user.email },
+    where: { id: session.user.id },
     select: { name: true, email: true },
   });
 
@@ -71,7 +71,7 @@ export default async function PengaturanPage() {
     <SettingsClient
       initialProfile={{
         name: admin?.name ?? session.user.name ?? "Admin",
-        email: admin?.email ?? session.user.email,
+        email: admin?.email ?? session.user.email ?? "",
       }}
       initialStore={{
         whatsappNumber: storeData?.whatsappNumber ?? envFallbackWa,

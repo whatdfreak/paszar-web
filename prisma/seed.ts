@@ -14,6 +14,16 @@ import bcrypt from "bcrypt";
 const prisma = new PrismaClient();
 
 async function main() {
+  // GUARD: seed menghapus SELURUH data & membuat admin dengan password default.
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.ALLOW_PRODUCTION_SEED !== "true"
+  ) {
+    throw new Error(
+      "Seed dibatalkan: NODE_ENV=production. Set ALLOW_PRODUCTION_SEED=true jika benar-benar disengaja, lalu GANTI password admin segera."
+    );
+  }
+
   console.log("🌱 Memulai proses seeding database PASzar (Production Data v2)...\n");
 
   // ── 1. BERSIHKAN DATA LAMA ──────────────────────────────────────────────

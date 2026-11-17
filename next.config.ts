@@ -89,6 +89,8 @@ const apiHeaders = [
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
+  // Jangan bocorkan teknologi server lewat header X-Powered-By
+  poweredByHeader: false,
 
   // ── Security Headers ────────────────────────────────────────
   async headers() {

@@ -28,6 +28,7 @@ const updateProfileSchema = z.object({
   email: z
     .string()
     .trim()
+    .toLowerCase()
     .email("Format email tidak valid.")
     .max(120, "Email maksimal 120 karakter."),
 });
@@ -38,7 +39,7 @@ const changePasswordSchema = z
     newPassword: z
       .string()
       .min(8, "Password baru minimal 8 karakter.")
-      .max(100, "Password baru maksimal 100 karakter."),
+      .max(72, "Password baru maksimal 72 karakter."),
     confirmPassword: z.string().min(1, "Konfirmasi password wajib diisi."),
   })
   .refine((data) => data.newPassword === data.confirmPassword, {
@@ -48,7 +49,7 @@ const changePasswordSchema = z
 
 async function requireAdminSession() {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.email) {
+  if (!session?.user?.id) {
     throw new Error("Unauthorized");
   }
   return session;
@@ -67,7 +68,7 @@ export async function updateAdminProfile(input: {
     }
 
     const currentAdmin = await prisma.admin.findUnique({
-      where: { email: session.user!.email! },
+      where: { id: session.user.id },
       select: { id: true },
     });
 
@@ -124,7 +125,7 @@ export async function changeAdminPassword(input: {
     }
 
     const admin = await prisma.admin.findUnique({
-      where: { email: session.user!.email! },
+      where: { id: session.user.id },
       select: { id: true, hashedPassword: true },
     });
 

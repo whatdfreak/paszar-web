@@ -2,11 +2,11 @@ import { z } from "zod";
 
 const isValidImagePathOrUrl = (val: string): boolean => {
   if (val.startsWith("/uploads/")) {
-    return /^\/uploads\/products\/[a-zA-Z0-9._-]+$/.test(val);
+    return /^\/uploads\/products\/[a-zA-Z0-9-]+\.(jpg|png|webp)$/.test(val);
   }
   try {
     const parsed = new URL(val);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    return parsed.protocol === "https:" && val.length <= 500;
   } catch {
     return false;
   }

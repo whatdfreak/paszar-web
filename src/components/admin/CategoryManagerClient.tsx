@@ -49,7 +49,7 @@ export interface CategoryRow {
 }
 
 type ViewMode = "table" | "grid";
-type CategoryFilter = "all" | "filled" | "empty";
+type CategoryFilter = "filled" | "empty";
 type CategorySort = "sortOrder" | "nameAsc" | "productsDesc";
 
 // ── Helpers ───────────────────────────────────────────────────
@@ -449,8 +449,15 @@ export default function CategoryManagerClient({
     useState<CategoryRow[]>(initialCategories);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [filterBy, setFilterBy] = useState<CategoryFilter>("all");
+  const [filterOptions, setFilterOptions] = useState<CategoryFilter[]>([]);
   const [sortBy, setSortBy] = useState<CategorySort>("sortOrder");
+
+  const toggleFilterOption = (option: CategoryFilter) => {
+    setFilterOptions((prev) =>
+      prev.includes(option) ? prev.filter((item) => item !== option) : [...prev, option]
+    );
+    setCurrentPage(1);
+  };
   const [showStatistics, setShowStatistics] = useState(true);
 
   const [openMenu, setOpenMenu] = useState<"view" | "filter" | "sort" | null>(
@@ -509,8 +516,12 @@ export default function CategoryManagerClient({
       ) {
         return false;
       }
-      if (filterBy === "filled" && c._count.products === 0) return false;
-      if (filterBy === "empty" && c._count.products > 0) return false;
+      if (filterOptions.length > 0) {
+        const isFilled = c._count.products > 0;
+        const matchesFilled = filterOptions.includes("filled") && isFilled;
+        const matchesEmpty = filterOptions.includes("empty") && !isFilled;
+        if (!matchesFilled && !matchesEmpty) return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -763,41 +774,73 @@ export default function CategoryManagerClient({
                   setOpenMenu((m) => (m === "filter" ? null : "filter"))
                 }
                 className={`inline-flex items-center gap-1.5 h-8 px-2.5 border rounded-lg text-xs font-medium shadow-sm transition-colors ${
-                  filterBy !== "all"
+                  filterOptions.length > 0
                     ? "bg-slate-900 text-white border-slate-900"
                     : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 <span>Filter</span>
+                {filterOptions.length > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.2 rounded-full bg-white/20 text-[10px] tabular-nums">
+                    {filterOptions.length}
+                  </span>
+                )}
               </button>
 
               {openMenu === "filter" && (
-                <div className="absolute left-0 mt-1.5 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-1">
-                  {(
-                    [
-                      { key: "all", label: "Semua Kategori" },
-                      { key: "filled", label: "Terisi Produk" },
-                      { key: "empty", label: "Belum Terisi (0)" },
-                    ] as const
-                  ).map((opt) => (
+                <div className="absolute left-0 mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                    Status Kategori
+                  </p>
+                  <div className="space-y-1">
+                    {(
+                      [
+                        { key: "filled", label: "Terisi Produk" },
+                        { key: "empty", label: "Belum Terisi (0)" },
+                      ] as const
+                    ).map((opt) => {
+                      const checked = filterOptions.includes(opt.key);
+                      return (
+                        <div
+                          key={opt.key}
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => toggleFilterOption(opt.key)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              toggleFilterOption(opt.key);
+                            }
+                          }}
+                          className={`w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg text-xs cursor-pointer transition-colors ${
+                            checked
+                              ? "bg-slate-100 text-slate-900 font-medium"
+                              : "text-slate-600 hover:bg-slate-50"
+                          }`}
+                        >
+                          <TableCheckbox
+                            checked={checked}
+                            onChange={() => {}}
+                            ariaLabel={opt.label}
+                          />
+                          <span>{opt.label}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {filterOptions.length > 0 && (
                     <button
-                      key={opt.key}
                       type="button"
                       onClick={() => {
-                        setFilterBy(opt.key);
+                        setFilterOptions([]);
                         setCurrentPage(1);
-                        setOpenMenu(null);
                       }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${
-                        filterBy === opt.key
-                          ? "bg-slate-100 text-slate-900"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
+                      className="w-full py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-800 border-t border-slate-100 mt-1 pt-2"
                     >
-                      {opt.label}
+                      Reset Filter
                     </button>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -1118,7 +1161,7 @@ export default function CategoryManagerClient({
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm py-14 px-4 text-center flex flex-col items-center">
             <Tags className="w-8 h-8 text-slate-300 mb-2" />
             <p className="text-sm font-semibold text-slate-700">
-              {search || filterBy !== "all"
+              {search || filterOptions.length > 0
                 ? "Kategori tidak ditemukan"
                 : "Belum ada kategori produk"}
             </p>

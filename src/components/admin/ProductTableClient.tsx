@@ -65,7 +65,7 @@ interface ProductTableClientProps {
 }
 
 type ViewMode = "table" | "grid";
-type StatusFilter = "all" | "inStock" | "lowStock" | "outOfStock" | "inactive";
+type StatusFilter = "inStock" | "lowStock" | "outOfStock" | "inactive";
 type SortOption =
   | "newest"
   | "nameAsc"
@@ -245,8 +245,8 @@ export default function ProductTableClient({
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilters, setStatusFilters] = useState<StatusFilter[]>([]);
+  const [categoryFilters, setCategoryFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [showStatistics, setShowStatistics] = useState(true);
 
@@ -276,13 +276,17 @@ export default function ProductTableClient({
     message: string;
   } | null>(null);
 
-  // Close popovers on outside click
+  // Close popovers on outside click (abaikan klik pada portal AdminSelect)
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
+      const target = e.target;
       if (
-        toolbarRef.current &&
-        !toolbarRef.current.contains(e.target as Node)
+        target instanceof Element &&
+        target.closest('[data-admin-select-menu="true"]')
       ) {
+        return;
+      }
+      if (toolbarRef.current && !toolbarRef.current.contains(target as Node)) {
         setOpenMenu(null);
       }
     };
@@ -315,22 +319,22 @@ export default function ProductTableClient({
       ) {
         return false;
       }
-      if (categoryFilter !== "all" && p.categoryId !== categoryFilter) {
-        return false;
-      }
-      if (statusFilter === "inStock" && (!p.isActive || p.stock <= 5)) {
-        return false;
-      }
       if (
-        statusFilter === "lowStock" &&
-        (!p.isActive || p.stock === 0 || p.stock > 5)
+        categoryFilters.length > 0 &&
+        !categoryFilters.includes(p.categoryId)
       ) {
         return false;
       }
-      if (statusFilter === "outOfStock" && (!p.isActive || p.stock > 0)) {
-        return false;
+      if (statusFilters.length > 0) {
+        const matchesStatus = statusFilters.some((st) => {
+          if (st === "inStock") return p.isActive && p.stock > 5;
+          if (st === "lowStock") return p.isActive && p.stock > 0 && p.stock <= 5;
+          if (st === "outOfStock") return p.isActive && p.stock === 0;
+          if (st === "inactive") return !p.isActive;
+          return false;
+        });
+        if (!matchesStatus) return false;
       }
-      if (statusFilter === "inactive" && p.isActive) return false;
       return true;
     })
     .sort((a, b) => {
@@ -499,8 +503,23 @@ export default function ProductTableClient({
     }
   };
 
-  const activeFiltersCount =
-    (statusFilter !== "all" ? 1 : 0) + (categoryFilter !== "all" ? 1 : 0);
+  const activeFiltersCount = statusFilters.length + categoryFilters.length;
+
+  const toggleStatusFilter = (st: StatusFilter) => {
+    setStatusFilters((prev) =>
+      prev.includes(st) ? prev.filter((item) => item !== st) : [...prev, st]
+    );
+    setCurrentPage(1);
+  };
+
+  const toggleCategoryFilter = (catId: string) => {
+    setCategoryFilters((prev) =>
+      prev.includes(catId)
+        ? prev.filter((item) => item !== catId)
+        : [...prev, catId]
+    );
+    setCurrentPage(1);
+  };
 
   // Pagination page numbers
   const pageNumbers: number[] = [];
@@ -646,69 +665,87 @@ export default function ProductTableClient({
               {openMenu === "filter" && (
                 <div className="absolute left-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-3.5 space-y-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                      Status Stok & Publikasi
-                    </label>
-                    <AdminSelect
-                      value={statusFilter}
-                      ariaLabel="Filter status stok"
-                      onChange={(val) => {
-                        setStatusFilter(val as StatusFilter);
-                        setCurrentPage(1);
-                      }}
-                      triggerClassName="w-full inline-flex items-center justify-between gap-2 h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 hover:bg-white transition-colors cursor-pointer"
-                      menuClassName="w-full"
-                      options={[
-                        { value: "all", label: "Semua Status" },
-                        { value: "inStock", label: "Tersedia (> 5)" },
-                        { value: "lowStock", label: "Restock (1–5)" },
-                        { value: "outOfStock", label: "Stok Habis (0)" },
-                        { value: "inactive", label: "Nonaktif" },
-                      ]}
-                    />
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      {t.products.filterStatusLabel}
+                    </p>
+                    <div className="space-y-1.5">
+                      {(
+                        [
+                          { key: "inStock", label: t.products.inStock },
+                          { key: "lowStock", label: t.products.lowStock },
+                          {
+                            key: "outOfStock",
+                            label: t.products.outOfStockFilter,
+                          },
+                          { key: "inactive", label: t.products.inactiveFilter },
+                        ] as const
+                      ).map((opt) => {
+                        const checked = statusFilters.includes(opt.key);
+                        return (
+                          <div
+                            key={opt.key}
+                            onClick={() => toggleStatusFilter(opt.key)}
+                            className="flex items-center gap-2.5 py-1 px-1.5 rounded-lg hover:bg-slate-50 cursor-pointer select-none"
+                          >
+                            <TableCheckbox
+                              checked={checked}
+                              onChange={() => {}}
+                              ariaLabel={opt.label}
+                            />
+                            <span className="text-xs text-slate-700 font-medium">
+                              {opt.label}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                      Kategori
-                    </label>
-                    <AdminSelect
-                      value={categoryFilter}
-                      ariaLabel="Filter kategori"
-                      onChange={(val) => {
-                        setCategoryFilter(val);
-                        setCurrentPage(1);
-                      }}
-                      triggerClassName="w-full inline-flex items-center justify-between gap-2 h-8 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium text-slate-800 hover:bg-white transition-colors cursor-pointer"
-                      menuClassName="w-full"
-                      options={[
-                        { value: "all", label: "Semua Kategori" },
-                        ...categories.map((cat) => ({
-                          value: cat.id,
-                          label: cat.name,
-                        })),
-                      ]}
-                    />
+                  <div className="border-t border-slate-100 pt-2.5">
+                    <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+                      {t.products.filterCategoryLabel}
+                    </p>
+                    <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
+                      {categories.map((cat) => {
+                        const checked = categoryFilters.includes(cat.id);
+                        return (
+                          <div
+                            key={cat.id}
+                            onClick={() => toggleCategoryFilter(cat.id)}
+                            className="flex items-center gap-2.5 py-1 px-1.5 rounded-lg hover:bg-slate-50 cursor-pointer select-none"
+                          >
+                            <TableCheckbox
+                              checked={checked}
+                              onChange={() => {}}
+                              ariaLabel={cat.name}
+                            />
+                            <span className="text-xs text-slate-700 font-medium truncate">
+                              {cat.name}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
-                  <div className="pt-1 flex justify-between items-center border-t border-slate-100">
+                  <div className="pt-2 flex justify-between items-center border-t border-slate-100">
                     <button
                       type="button"
                       onClick={() => {
-                        setStatusFilter("all");
-                        setCategoryFilter("all");
+                        setStatusFilters([]);
+                        setCategoryFilters([]);
                         setCurrentPage(1);
                       }}
                       className="text-[11px] font-medium text-slate-500 hover:text-slate-900"
                     >
-                      Reset Filter
+                      {t.common.resetFilter}
                     </button>
                     <button
                       type="button"
                       onClick={() => setOpenMenu(null)}
                       className="text-[11px] font-semibold text-[#0B1C30]"
                     >
-                      Terapkan
+                      {t.common.apply}
                     </button>
                   </div>
                 </div>
@@ -1149,8 +1186,8 @@ export default function ProductTableClient({
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  setStatusFilter("all");
-                  setCategoryFilter("all");
+                  setStatusFilters([]);
+                  setCategoryFilters([]);
                   setCurrentPage(1);
                 }}
                 className="mt-3 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"

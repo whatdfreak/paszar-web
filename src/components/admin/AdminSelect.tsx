@@ -25,7 +25,7 @@ interface MenuPosition {
   top?: number;
   bottom?: number;
   left: number;
-  minWidth: number;
+  width: number;
   maxHeight: number;
 }
 
@@ -44,7 +44,7 @@ export function AdminSelect({
   const [coords, setCoords] = useState<MenuPosition>({
     top: 0,
     left: 0,
-    minWidth: 120,
+    width: 140,
     maxHeight: 240,
   });
 
@@ -118,7 +118,7 @@ export function AdminSelect({
         top: openUpward ? undefined : rect.bottom + 6,
         bottom: openUpward ? window.innerHeight - rect.top + 6 : undefined,
         left,
-        minWidth: minW,
+        width: minW,
         maxHeight: Math.max(
           96,
           Math.min(240, openUpward ? spaceAbove : spaceBelow)
@@ -159,13 +159,15 @@ export function AdminSelect({
         createPortal(
           <div
             ref={menuRef}
+            data-admin-select-menu="true"
             style={{
               position: "fixed",
               top: coords.top !== undefined ? `${coords.top}px` : undefined,
               bottom:
                 coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
               left: `${coords.left}px`,
-              minWidth: `${coords.minWidth}px`,
+              minWidth: `${coords.width}px`,
+              maxWidth: "320px",
               maxHeight: `${coords.maxHeight}px`,
             }}
             className={`flex flex-col bg-white border border-slate-200 rounded-xl shadow-lg z-[200] p-1 overflow-y-auto ${menuClassName}`}

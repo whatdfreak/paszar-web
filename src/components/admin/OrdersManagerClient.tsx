@@ -373,7 +373,7 @@ export default function OrdersManagerClient({
   const [orders, setOrders] = useState<OrderRow[]>(initialOrders);
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | OrderStatus>("ALL");
+  const [statusFilters, setStatusFilters] = useState<OrderStatus[]>([]);
   const [sortBy, setSortBy] = useState<OrderSort>("newest");
   const [showStatistics, setShowStatistics] = useState(true);
 
@@ -398,10 +398,14 @@ export default function OrdersManagerClient({
 
   useEffect(() => {
     const handleOutside = (e: MouseEvent) => {
+      const target = e.target;
       if (
-        toolbarRef.current &&
-        !toolbarRef.current.contains(e.target as Node)
+        target instanceof Element &&
+        target.closest('[data-admin-select-menu="true"]')
       ) {
+        return;
+      }
+      if (toolbarRef.current && !toolbarRef.current.contains(target as Node)) {
         setOpenMenu(null);
       }
     };
@@ -441,7 +445,9 @@ export default function OrdersManagerClient({
       ) {
         return false;
       }
-      if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
+      if (statusFilters.length > 0 && !statusFilters.includes(o.status)) {
+        return false;
+      }
       return true;
     })
     .sort((a, b) => {
@@ -672,57 +678,78 @@ export default function OrdersManagerClient({
                   setOpenMenu((m) => (m === "filter" ? null : "filter"))
                 }
                 className={`inline-flex items-center gap-1.5 h-8 px-2.5 border rounded-lg text-xs font-medium shadow-sm transition-colors ${
-                  statusFilter !== "ALL"
+                  statusFilters.length > 0
                     ? "bg-slate-900 text-white border-slate-900"
                     : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50"
                 }`}
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>
-                  {statusFilter === "ALL"
-                    ? "Filter"
-                    : STATUS_CONFIG[statusFilter].label}
-                </span>
+                <span>{t.common.filter}</span>
+                {statusFilters.length > 0 && (
+                  <span className="px-1.5 rounded-full bg-white/20 text-[10px]">
+                    {statusFilters.length}
+                  </span>
+                )}
               </button>
 
               {openMenu === "filter" && (
-                <div className="absolute left-0 mt-1.5 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStatusFilter("ALL");
-                      setCurrentPage(1);
-                      setOpenMenu(null);
-                    }}
-                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium ${
-                      statusFilter === "ALL"
-                        ? "bg-slate-100 text-slate-900"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
-                  >
-                    Semua Status
-                  </button>
-                  {STATUS_FLOW.map((s) => (
+                <div className="absolute left-0 mt-1.5 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-30 p-3 space-y-2">
+                  <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                    {t.orders.colStatus}
+                  </p>
+                  <div className="space-y-1">
+                    {STATUS_FLOW.map((s) => {
+                      const checked = statusFilters.includes(s);
+                      const count = orders.filter((o) => o.status === s).length;
+                      return (
+                        <div
+                          key={s}
+                          onClick={() => {
+                            setStatusFilters((prev) =>
+                              prev.includes(s)
+                                ? prev.filter((item) => item !== s)
+                                : [...prev, s]
+                            );
+                            setCurrentPage(1);
+                          }}
+                          className="flex items-center justify-between py-1 px-1.5 rounded-lg hover:bg-slate-50 cursor-pointer select-none"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <TableCheckbox
+                              checked={checked}
+                              onChange={() => {}}
+                              ariaLabel={t.statuses[s]}
+                            />
+                            <span className="text-xs text-slate-700 font-medium">
+                              {t.statuses[s]}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            {count}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-2 flex justify-between items-center border-t border-slate-100">
                     <button
-                      key={s}
                       type="button"
                       onClick={() => {
-                        setStatusFilter(s);
+                        setStatusFilters([]);
                         setCurrentPage(1);
-                        setOpenMenu(null);
                       }}
-                      className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center justify-between ${
-                        statusFilter === s
-                          ? "bg-slate-100 text-slate-900"
-                          : "text-slate-600 hover:bg-slate-50"
-                      }`}
+                      className="text-[11px] font-medium text-slate-500 hover:text-slate-900"
                     >
-                      <span>{STATUS_CONFIG[s].label}</span>
-                      <span className="text-[10px] text-slate-400">
-                        {orders.filter((o) => o.status === s).length}
-                      </span>
+                      {t.common.resetFilter}
                     </button>
-                  ))}
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenu(null)}
+                      className="text-[11px] font-semibold text-[#0B1C30]"
+                    >
+                      {t.common.apply}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1058,21 +1085,21 @@ export default function OrdersManagerClient({
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm py-14 px-4 text-center flex flex-col items-center">
             <ShoppingBag className="w-8 h-8 text-slate-300 mb-2" />
             <p className="text-sm font-semibold text-slate-700">
-              {search || statusFilter !== "ALL"
-                ? "Tidak ada pesanan yang cocok"
-                : "Belum ada pesanan masuk"}
+              {search || statusFilters.length > 0
+                ? t.orders.emptyFiltered
+                : t.orders.emptyAll}
             </p>
-            {(search || statusFilter !== "ALL") && (
+            {(search || statusFilters.length > 0) && (
               <button
                 type="button"
                 onClick={() => {
                   setSearch("");
-                  setStatusFilter("ALL");
+                  setStatusFilters([]);
                   setCurrentPage(1);
                 }}
                 className="mt-3 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"
               >
-                Reset Filter
+                {t.common.resetFilter}
               </button>
             )}
           </div>

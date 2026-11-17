@@ -535,7 +535,6 @@ export default function ProductFormClient({
                     setFieldErrors((prev) => ({ ...prev, categoryId: "" }));
                   }}
                   triggerClassName={`${inputCls} flex items-center justify-between cursor-pointer disabled:opacity-50`}
-                  menuClassName="w-full"
                   options={categories.map((cat) => ({
                     value: cat.id,
                     label: cat.name,

@@ -139,6 +139,8 @@ const translations = {
     products: {
       title: "Produk",
       add: "Tambah Produk",
+      syncFlobakarya: "Sinkronkan Flobakarya",
+      syncingFlobakarya: "Menyinkronkan...",
       searchPlaceholder: "Cari produk atau kategori...",
       filterStatusLabel: "Status Stok & Publikasi",
       filterCategoryLabel: "Kategori",
@@ -454,6 +456,8 @@ const translations = {
     products: {
       title: "Products",
       add: "Add Product",
+      syncFlobakarya: "Sync Flobakarya",
+      syncingFlobakarya: "Syncing...",
       searchPlaceholder: "Search products or categories...",
       filterStatusLabel: "Stock & Publication Status",
       filterCategoryLabel: "Category",

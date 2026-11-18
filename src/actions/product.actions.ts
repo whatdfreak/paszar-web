@@ -28,6 +28,10 @@ import {
   type CreateProductInput,
   type UpdateProductInput,
 } from "@/validations/product.schema";
+import {
+  syncFlobakaryaCatalog,
+  type SyncFlobakaryaResult,
+} from "@/lib/flobakarya-sync";
 
 // CUID validator — digunakan untuk semua ID parameter
 const cuidSchema = z.string().cuid("ID tidak valid.");
@@ -77,8 +81,30 @@ export async function createProduct(
       return { success: false, error: parsed.error.issues[0].message };
     }
 
-    const { name, description, story, price, stock, categoryId, image, isActive } =
-      parsed.data;
+    const {
+      name,
+      description,
+      story,
+      price,
+      stock,
+      categoryId,
+      image,
+      galleryEnabled,
+      images,
+      externalUrl,
+      isActive,
+    } = parsed.data;
+
+    const normalizedImages = Array.from(new Set(images)).filter(
+      (url) => url !== image
+    );
+    if (galleryEnabled && normalizedImages.length === 0) {
+      return {
+        success: false,
+        error:
+          "Tambahkan minimal 1 foto galeri tambahan atau nonaktifkan Galeri Multi-Foto.",
+      };
+    }
 
     let slug = toSlug(name);
     if (!slug) {
@@ -116,11 +142,25 @@ export async function createProduct(
     if (clash) slug = `${slug}-${Date.now()}`;
 
     const product = await prisma.product.create({
-      data: { name, slug, description, story, price, stock, categoryId, image, isActive },
+      data: {
+        name,
+        slug,
+        description,
+        story,
+        price,
+        stock,
+        categoryId,
+        image,
+        galleryEnabled,
+        images: normalizedImages,
+        externalUrl: externalUrl?.trim() || null,
+        isActive,
+      },
       select: { id: true, name: true, slug: true },
     });
 
     revalidateProductPaths();
+    revalidatePath(`/produk/${product.slug}`);
     return { success: true, data: product };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
@@ -144,9 +184,44 @@ export async function updateProduct(
       return { success: false, error: parsed.error.issues[0].message };
     }
 
-    const { id, name, categoryId, ...rest } = parsed.data;
+    const { id, name, categoryId, images, galleryEnabled, externalUrl, ...rest } = parsed.data;
+
+    const existingProduct = await prisma.product.findUnique({
+      where: { id },
+      select: { id: true, slug: true, image: true, galleryEnabled: true, images: true },
+    });
+    if (!existingProduct) {
+      return { success: false, error: "Produk tidak ditemukan." };
+    }
 
     const updateData: Record<string, unknown> = { ...rest };
+
+    const effectiveImage =
+      typeof rest.image === "string" ? rest.image : existingProduct.image;
+    const effectiveGalleryEnabled =
+      galleryEnabled !== undefined ? galleryEnabled : existingProduct.galleryEnabled;
+    const rawImages = images !== undefined ? images : existingProduct.images;
+    const effectiveImages = Array.from(new Set(rawImages)).filter(
+      (url) => url !== effectiveImage
+    );
+
+    if (effectiveGalleryEnabled && effectiveImages.length === 0) {
+      return {
+        success: false,
+        error:
+          "Tambahkan minimal 1 foto galeri tambahan atau nonaktifkan Galeri Multi-Foto.",
+      };
+    }
+
+    if (galleryEnabled !== undefined) {
+      updateData.galleryEnabled = galleryEnabled;
+    }
+    if (images !== undefined || rest.image !== undefined) {
+      updateData.images = effectiveImages;
+    }
+    if (externalUrl !== undefined) {
+      updateData.externalUrl = externalUrl?.trim() || null;
+    }
 
     if (categoryId) {
       const categoryExists = await prisma.category.findUnique({
@@ -198,6 +273,8 @@ export async function updateProduct(
     });
 
     revalidateProductPaths();
+    revalidatePath(`/produk/${existingProduct.slug}`);
+    revalidatePath(`/produk/${product.slug}`);
     return { success: true, data: product };
   } catch (err: unknown) {
     if (err instanceof Error && err.message === "Unauthorized") {
@@ -559,5 +636,31 @@ export async function bulkDeleteProducts(
     }
     console.error("[bulkDeleteProducts]", err);
     return { success: false, error: "Gagal menghapus produk terpilih." };
+  }
+}
+
+// ── Live Sync Flobakarya ──────────────────────────────────────
+
+export async function syncFlobakaryaProducts(): Promise<
+  ActionResult<SyncFlobakaryaResult>
+> {
+  try {
+    await requireSession();
+    const result = await syncFlobakaryaCatalog({ force: true });
+    revalidateProductPaths();
+    revalidatePath("/");
+    return { success: true, data: result };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "Unauthorized") {
+      return { success: false, error: "Unauthorized: Silakan login kembali." };
+    }
+    console.error("[syncFlobakaryaProducts]", err);
+    return {
+      success: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "Gagal menyinkronkan katalog Flobakarya.",
+    };
   }
 }

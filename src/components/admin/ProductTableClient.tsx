@@ -8,6 +8,7 @@ import {
   deleteProduct,
   bulkSetProductActive,
   bulkDeleteProducts,
+  syncFlobakaryaProducts,
 } from "@/actions/product.actions";
 import { AdminTopBar } from "@/components/admin/AdminTopBar";
 import { AdminSelect } from "@/components/admin/AdminSelect";
@@ -35,6 +36,7 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  RefreshCw,
 } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────
@@ -242,7 +244,13 @@ export default function ProductTableClient({
 }: ProductTableClientProps) {
   const router = useRouter();
   const { t } = useAdminI18n();
+  const [prevInitialProducts, setPrevInitialProducts] =
+    useState<ProductRow[]>(initialProducts);
   const [products, setProducts] = useState<ProductRow[]>(initialProducts);
+  if (initialProducts !== prevInitialProducts) {
+    setPrevInitialProducts(initialProducts);
+    setProducts(initialProducts);
+  }
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("table");
   const [statusFilters, setStatusFilters] = useState<StatusFilter[]>([]);
@@ -271,10 +279,40 @@ export default function ProductTableClient({
     count?: number;
   } | null>(null);
   const [isMutating, startMutation] = useTransition();
+  const [isSyncingFlobakarya, setIsSyncingFlobakarya] = useState(false);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  const handleSyncFlobakarya = async () => {
+    setFeedback(null);
+    setIsSyncingFlobakarya(true);
+    try {
+      const result = await syncFlobakaryaProducts();
+      if (result.success) {
+        const { parsedCount, createdCount, updatedCount, deactivatedCount } =
+          result.data;
+        setFeedback({
+          type: "success",
+          message: `Sinkronisasi Flobakarya selesai (${parsedCount} produk diperiksa: ${createdCount} baru, ${updatedCount} diperbarui, ${deactivatedCount} dinonaktifkan).`,
+        });
+        router.refresh();
+      } else {
+        setFeedback({ type: "error", message: result.error });
+      }
+    } catch (err) {
+      setFeedback({
+        type: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Terjadi kesalahan saat menyinkronkan Flobakarya.",
+      });
+    } finally {
+      setIsSyncingFlobakarya(false);
+    }
+  };
 
   // Close popovers on outside click (abaikan klik pada portal AdminSelect)
   useEffect(() => {
@@ -821,8 +859,25 @@ export default function ProductTableClient({
             </label>
           </div>
 
-          {/* Right Button: + Tambah Produk */}
+          {/* Right Button: Sinkronkan Flobakarya + Tambah Produk */}
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void handleSyncFlobakarya()}
+              disabled={isSyncingFlobakarya}
+              className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 rounded-lg h-8 px-3 text-xs font-medium shadow-sm transition-colors disabled:opacity-50"
+            >
+              <RefreshCw
+                className={`w-3.5 h-3.5 text-slate-500 ${
+                  isSyncingFlobakarya ? "animate-spin" : ""
+                }`}
+              />
+              <span>
+                {isSyncingFlobakarya
+                  ? t.products.syncingFlobakarya
+                  : t.products.syncFlobakarya}
+              </span>
+            </button>
             <Link
               href="/dashboard/produk/baru"
               className="inline-flex items-center gap-1.5 bg-[#0B1C30] hover:bg-[#132944] text-white rounded-lg h-8 px-3 text-xs font-medium shadow-sm transition-colors"

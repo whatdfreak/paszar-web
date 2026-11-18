@@ -8,7 +8,10 @@ import {
   updateProduct,
   uploadProductImage,
 } from "@/actions/product.actions";
-import type { CreateProductInput } from "@/validations/product.schema";
+import {
+  MAX_GALLERY_IMAGES,
+  type CreateProductInput,
+} from "@/validations/product.schema";
 import { AdminTopBar } from "@/components/admin/AdminTopBar";
 import { AdminSelect } from "@/components/admin/AdminSelect";
 import { useAdminI18n } from "@/lib/admin-i18n";
@@ -17,7 +20,9 @@ import {
   CheckCircle2,
   ChevronLeft,
   ImageIcon,
+  Images,
   Loader2,
+  Plus,
   Trash2,
   UploadCloud,
 } from "lucide-react";
@@ -37,6 +42,9 @@ interface ProductData {
   price: number;
   stock: number;
   image: string;
+  galleryEnabled: boolean;
+  images: string[];
+  externalUrl?: string | null;
   isActive: boolean;
   categoryId: string;
 }
@@ -195,6 +203,7 @@ export default function ProductFormClient({
   const { t } = useAdminI18n();
   const isEditMode = Boolean(product);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     name: product?.name ?? "",
@@ -204,6 +213,9 @@ export default function ProductFormClient({
     stock: product?.stock?.toString() ?? "0",
     categoryId: product?.categoryId ?? (categories[0]?.id ?? ""),
     image: product?.image ?? "",
+    galleryEnabled: product?.galleryEnabled ?? false,
+    images: product?.images ?? [],
+    externalUrl: product?.externalUrl ?? "",
     isActive: product?.isActive ?? true,
   });
 
@@ -215,6 +227,7 @@ export default function ProductFormClient({
   // Upload state
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isGalleryUploading, setIsGalleryUploading] = useState(false);
   const [uploadMeta, setUploadMeta] = useState<string | null>(null);
   const [previewBroken, setPreviewBroken] = useState(false);
 
@@ -232,59 +245,71 @@ export default function ProductFormClient({
     setFieldErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  const processAndUploadFile = async (file: File) => {
-    setFieldErrors((prev) => ({ ...prev, image: "" }));
-    setSubmitError(null);
-
+  const validateAndUploadSingleFile = async (
+    file: File
+  ): Promise<
+    | { ok: true; url: string; sizeBytes: number; width: number; height: number }
+    | { ok: false; error: string }
+  > => {
     if (!ALLOWED_TYPES.includes(file.type)) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        image: "Format tidak didukung. Gunakan file JPG, PNG, atau WebP.",
-      }));
-      return;
+      return {
+        ok: false,
+        error: "Format tidak didukung. Gunakan file JPG, PNG, atau WebP.",
+      };
     }
 
     if (file.size === 0) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        image: "File gambar kosong atau rusak.",
-      }));
-      return;
+      return { ok: false, error: "File gambar kosong atau rusak." };
     }
 
     if (file.size > MAX_RAW_UPLOAD_BYTES) {
-      setFieldErrors((prev) => ({
-        ...prev,
-        image: "Ukuran file mentah terlalu besar (maksimal 10 MB).",
-      }));
-      return;
+      return {
+        ok: false,
+        error: "Ukuran file mentah terlalu besar (maksimal 10 MB).",
+      };
     }
 
+    const { optimizedFile, width, height } = await optimizeProductImage(file);
+
+    if (optimizedFile.size > MAX_FINAL_BYTES) {
+      return {
+        ok: false,
+        error: "Ukuran gambar setelah kompresi masih melebihi 2 MB.",
+      };
+    }
+
+    const formData = new FormData();
+    formData.append("file", optimizedFile);
+
+    const uploadResult = await uploadProductImage(formData);
+    if (!uploadResult.success) {
+      return { ok: false, error: uploadResult.error };
+    }
+
+    return {
+      ok: true,
+      url: uploadResult.data.url,
+      sizeBytes: uploadResult.data.sizeBytes,
+      width,
+      height,
+    };
+  };
+
+  const processAndUploadFile = async (file: File) => {
+    setFieldErrors((prev) => ({ ...prev, image: "" }));
+    setSubmitError(null);
     setIsUploading(true);
     try {
-      const { optimizedFile, width, height } = await optimizeProductImage(file);
-
-      if (optimizedFile.size > MAX_FINAL_BYTES) {
-        setFieldErrors((prev) => ({
-          ...prev,
-          image: "Ukuran gambar setelah kompresi masih melebihi 2 MB.",
-        }));
+      const res = await validateAndUploadSingleFile(file);
+      if (!res.ok) {
+        setFieldErrors((prev) => ({ ...prev, image: res.error }));
         return;
       }
 
-      const formData = new FormData();
-      formData.append("file", optimizedFile);
-
-      const uploadResult = await uploadProductImage(formData);
-      if (!uploadResult.success) {
-        setFieldErrors((prev) => ({ ...prev, image: uploadResult.error }));
-        return;
-      }
-
-      setForm((prev) => ({ ...prev, image: uploadResult.data.url }));
+      setForm((prev) => ({ ...prev, image: res.url }));
       setPreviewBroken(false);
       setUploadMeta(
-        `WebP · ${formatFileSize(uploadResult.data.sizeBytes)} · ${width}×${height}px`
+        `WebP · ${formatFileSize(res.sizeBytes)} · ${res.width}×${res.height}px`
       );
     } catch (err) {
       setFieldErrors((prev) => ({
@@ -296,6 +321,70 @@ export default function ProductFormClient({
       }));
     } finally {
       setIsUploading(false);
+    }
+  };
+
+  const handleGalleryFilesChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const fileList = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (fileList.length === 0) return;
+
+    setFieldErrors((prev) => ({ ...prev, images: "" }));
+    setSubmitError(null);
+
+    const remainingSlots = MAX_GALLERY_IMAGES - form.images.length;
+    if (remainingSlots <= 0) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        images: `Maksimal ${MAX_GALLERY_IMAGES} foto galeri tambahan.`,
+      }));
+      return;
+    }
+
+    const filesToUpload = fileList.slice(0, remainingSlots);
+    setIsGalleryUploading(true);
+    try {
+      const uploadedUrls: string[] = [];
+      let firstError: string | null = null;
+
+      for (const file of filesToUpload) {
+        const res = await validateAndUploadSingleFile(file);
+        if (res.ok) {
+          uploadedUrls.push(res.url);
+        } else if (!firstError) {
+          firstError = res.error;
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setForm((prev) => ({
+          ...prev,
+          images: Array.from(new Set([...prev.images, ...uploadedUrls])).filter(
+            (url) => url !== prev.image
+          ),
+        }));
+      }
+
+      if (firstError) {
+        setFieldErrors((prev) => ({ ...prev, images: firstError }));
+      } else if (fileList.length > remainingSlots) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          images: `Sebagian file dilewati karena batas maksimal ${MAX_GALLERY_IMAGES} foto galeri.`,
+        }));
+      }
+    } catch (err) {
+      setFieldErrors((prev) => ({
+        ...prev,
+        images:
+          err instanceof Error
+            ? err.message
+            : "Terjadi kesalahan saat mengunggah foto galeri.",
+      }));
+    } finally {
+      setIsGalleryUploading(false);
     }
   };
 
@@ -371,6 +460,32 @@ export default function ProductFormClient({
       errs.image = "Gambar produk wajib diunggah dari perangkat Anda.";
     }
 
+    if (form.galleryEnabled && form.images.length === 0) {
+      errs.images =
+        "Tambahkan minimal 1 foto galeri tambahan atau matikan Galeri Multi-Foto.";
+    }
+
+    const externalTrim = form.externalUrl.trim();
+    if (externalTrim) {
+      if (externalTrim.length > 500) {
+        errs.externalUrl = "URL maksimal 500 karakter.";
+      } else {
+        try {
+          const parsedUrl = new URL(externalTrim);
+          if (
+            parsedUrl.protocol !== "https:" &&
+            parsedUrl.protocol !== "http:"
+          ) {
+            errs.externalUrl =
+              "URL pembelian eksternal harus menggunakan https:// atau http://.";
+          }
+        } catch {
+          errs.externalUrl =
+            "Format URL pembelian eksternal tidak valid (gunakan https://).";
+        }
+      }
+    }
+
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -378,7 +493,7 @@ export default function ProductFormClient({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    if (isUploading) {
+    if (isUploading || isGalleryUploading) {
       setSubmitError("Tunggu hingga proses upload gambar selesai.");
       return;
     }
@@ -392,6 +507,9 @@ export default function ProductFormClient({
       stock: Number(form.stock),
       categoryId: form.categoryId,
       image: form.image.trim(),
+      galleryEnabled: form.galleryEnabled,
+      images: form.images,
+      externalUrl: form.externalUrl.trim() || null,
       isActive: form.isActive,
     };
 
@@ -638,6 +756,22 @@ export default function ProductFormClient({
                   />
                 </FormField>
               </div>
+
+              <FormField
+                label="Link Pembelian Website Asal (Opsional)"
+                hint="Isi jika tombol pembelian produk harus diarahkan ke website asal (mis. Flobakarya). Kosongkan untuk checkout normal di PASzar."
+                error={fieldErrors.externalUrl}
+              >
+                <input
+                  type="url"
+                  name="externalUrl"
+                  value={form.externalUrl}
+                  onChange={handleField}
+                  maxLength={500}
+                  placeholder="https://flobakarya.com/product.php?id=..."
+                  className={inputCls}
+                />
+              </FormField>
             </div>
           </div>
 
@@ -770,6 +904,113 @@ export default function ProductFormClient({
               )}
             </div>
 
+            {/* Galeri Multi-Foto (Opsional Toggle ON/OFF) */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0 mt-0.5">
+                    <Images className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-slate-900">
+                      Galeri Multi-Foto
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {form.galleryEnabled
+                        ? `Aktif · ${form.images.length}/${MAX_GALLERY_IMAGES} foto tambahan`
+                        : "Nonaktif · Hanya tampilkan 1 foto utama"}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input
+                    type="checkbox"
+                    name="galleryEnabled"
+                    checked={form.galleryEnabled}
+                    onChange={(e) => {
+                      handleField(e);
+                      setFieldErrors((prev) => ({ ...prev, images: "" }));
+                    }}
+                    className="sr-only peer"
+                  />
+                  <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:bg-[#0B1C30] transition-colors after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-5" />
+                </label>
+              </div>
+
+              {form.galleryEnabled && (
+                <div className="pt-3 border-t border-slate-100 space-y-3">
+                  <input
+                    ref={galleryInputRef}
+                    type="file"
+                    multiple
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleGalleryFilesChange}
+                    className="hidden"
+                  />
+
+                  <div className="grid grid-cols-3 gap-2">
+                    {form.images.map((url, idx) => (
+                      <div
+                        key={url}
+                        className="relative aspect-square rounded-lg overflow-hidden border border-slate-200 bg-slate-100 group"
+                      >
+                        <img
+                          src={url}
+                          alt={`Galeri ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setForm((prev) => ({
+                              ...prev,
+                              images: prev.images.filter((item) => item !== url),
+                            }))
+                          }
+                          className="absolute top-1 right-1 w-6 h-6 rounded-md bg-white/90 text-rose-600 hover:bg-rose-50 border border-slate-200 flex items-center justify-center opacity-90 group-hover:opacity-100 transition-opacity"
+                          title="Hapus foto galeri"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+
+                    {form.images.length < MAX_GALLERY_IMAGES && (
+                      <button
+                        type="button"
+                        disabled={isGalleryUploading}
+                        onClick={() => galleryInputRef.current?.click()}
+                        className="aspect-square rounded-lg border-2 border-dashed border-slate-200 hover:border-slate-300 hover:bg-slate-50 flex flex-col items-center justify-center gap-1 text-slate-500 transition-colors disabled:opacity-50"
+                      >
+                        {isGalleryUploading ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-[#0B1C30]" />
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4" />
+                            <span className="text-[10px] font-medium">
+                              Tambah
+                            </span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-slate-400">
+                    Maksimal {MAX_GALLERY_IMAGES} foto tambahan (JPG/PNG/WebP, maks 2 MB/foto).
+                  </p>
+
+                  {fieldErrors.images && (
+                    <p className="text-[11px] text-rose-600 flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      <span>{fieldErrors.images}</span>
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Status Publikasi */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 space-y-4">
               <div className="flex items-center justify-between gap-3">
@@ -806,7 +1047,10 @@ export default function ProductFormClient({
                 <button
                   type="submit"
                   disabled={
-                    isPending || isUploading || categories.length === 0
+                    isPending ||
+                    isUploading ||
+                    isGalleryUploading ||
+                    categories.length === 0
                   }
                   className="flex-1 h-9 rounded-lg bg-[#0B1C30] hover:bg-[#132944] text-white text-xs font-medium shadow-sm transition-colors disabled:opacity-50"
                 >

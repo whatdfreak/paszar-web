@@ -21,10 +21,20 @@ function formatRupiah(amount: number): string {
  */
 export function generateWhatsAppUrl(
   order: Order,
-  items: OrderItem[]
+  items: OrderItem[],
+  adminNumberOverride?: string
 ): string {
-  const adminNumber =
-    process.env.ADMIN_WHATSAPP_NUMBER ?? "6281234567890";
+  const rawAdminNumber =
+    adminNumberOverride?.trim() ||
+    process.env.ADMIN_WHATSAPP_NUMBER ||
+    "6281234567890";
+  let adminNumber = rawAdminNumber.replace(/\D/g, "");
+  if (adminNumber.startsWith("0")) {
+    adminNumber = `62${adminNumber.slice(1)}`;
+  }
+  if (!adminNumber) {
+    adminNumber = "6281234567890";
+  }
 
   // ── Susun baris item ─────────────────────────────────────────
   const itemLines = items

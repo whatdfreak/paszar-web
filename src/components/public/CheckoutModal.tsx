@@ -1,23 +1,11 @@
 // ============================================================
-// PASzar — CheckoutModal (Migrated + Refactored from Tes Proyek)
-// ============================================================
-// Refactoring notes:
-// - Removed @/context/CartContext → useCartStore (Zustand)
-// - Removed payment step (Fase 1 = WhatsApp flow, no payment gateway)
-// - Checkout now calls POST /api/orders and generates WA URL
-// - Form fields aligned with CheckoutSchema (Zod) and Prisma Order model
-// - border-gray-200 → border-stone-200
-// - No shadow utilities (clean modal border)
-// - Form state uses React controlled inputs
-// - Step 3 shows orderCode + WhatsApp redirect button
+// PASzar — CheckoutModal (Honeypot, Strict Client Validation & Server WA URL)
 // ============================================================
 
 "use client";
 
 import { useState } from "react";
 import { useCartStore, cartSubtotal } from "@/stores/cartStore";
-import { generateWhatsAppUrl } from "@/lib/whatsapp";
-import type { Order, OrderItem } from "@prisma/client";
 
 type CheckoutStep = 1 | 2;
 
@@ -29,6 +17,7 @@ interface FormData {
   customerProvince: string;
   customerPostalCode: string;
   notes: string;
+  _honeypot: string;
 }
 
 const EMPTY_FORM: FormData = {
@@ -39,6 +28,7 @@ const EMPTY_FORM: FormData = {
   customerProvince: "",
   customerPostalCode: "",
   notes: "",
+  _honeypot: "",
 };
 
 function formatRupiah(amount: number): string {
@@ -47,6 +37,45 @@ function formatRupiah(amount: number): string {
     currency: "IDR",
     minimumFractionDigits: 0,
   }).format(amount);
+}
+
+function validateCheckoutForm(form: FormData): string | null {
+  if (form._honeypot.trim().length > 0) {
+    return "Permintaan tidak valid.";
+  }
+  const name = form.customerName.trim();
+  if (name.length < 2 || name.length > 100) {
+    return "Nama lengkap minimal 2 karakter (maksimal 100).";
+  }
+  const phone = form.customerPhone.trim();
+  const phoneDigits = phone.replace(/\D/g, "");
+  if (
+    !/^[0-9+\-\s()]+$/.test(phone) ||
+    phoneDigits.length < 8 ||
+    phone.length > 20
+  ) {
+    return "Nomor HP / WhatsApp tidak valid (minimal 8 digit).";
+  }
+  const addr = form.customerAddress.trim();
+  if (addr.length < 5 || addr.length > 500) {
+    return "Alamat lengkap minimal 5 karakter (maksimal 500).";
+  }
+  const city = form.customerCity.trim();
+  if (city.length < 2 || city.length > 100) {
+    return "Kota / Kabupaten wajib diisi (minimal 2 karakter).";
+  }
+  const prov = form.customerProvince.trim();
+  if (prov.length < 2 || prov.length > 100) {
+    return "Provinsi wajib diisi (minimal 2 karakter).";
+  }
+  const postal = form.customerPostalCode.trim();
+  if (!/^\d{5,10}$/.test(postal)) {
+    return "Kode pos harus terdiri dari 5–10 digit angka.";
+  }
+  if (form.notes.trim().length > 500) {
+    return "Catatan maksimal 500 karakter.";
+  }
+  return null;
 }
 
 const inputClass =
@@ -66,8 +95,6 @@ export default function CheckoutModal() {
   const [orderCode, setOrderCode] = useState<string | null>(null);
   const [waUrl, setWaUrl] = useState<string | null>(null);
 
-  // Idempotency key — di-generate sekali per sesi modal
-  // Mencegah double-submit jika user klik dua kali atau network lag
   const [idempotencyKey] = useState(() =>
     typeof crypto !== "undefined" ? crypto.randomUUID() : Math.random().toString(36)
   );
@@ -87,14 +114,36 @@ export default function CheckoutModal() {
 
   const handleField = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    if (error) setError(null);
   };
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (loading) return;
+
+    if (items.length === 0) {
+      setError("Keranjang Anda kosong.");
+      return;
+    }
+
+    const validationError = validateCheckoutForm(form);
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
       const payload = {
-        ...form,
+        customerName: form.customerName.trim(),
+        customerPhone: form.customerPhone.trim(),
+        customerAddress: form.customerAddress.trim(),
+        customerCity: form.customerCity.trim(),
+        customerProvince: form.customerProvince.trim(),
+        customerPostalCode: form.customerPostalCode.trim(),
+        notes: form.notes.trim() || undefined,
+        _honeypot: form._honeypot,
         items: items.map((i) => ({
           productId: i.id,
           productName: i.name,
@@ -107,43 +156,30 @@ export default function CheckoutModal() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          // Anti double-submit: server akan mengembalikan hasil yang sama
-          // jika key ini sudah pernah diproses (dalam 10 menit)
           "X-Idempotency-Key": idempotencyKey,
         },
         body: JSON.stringify(payload),
       });
 
-      const data = (await res.json()) as { success: boolean; orderCode?: string; error?: string };
+      const data = (await res.json()) as {
+        success: boolean;
+        orderCode?: string;
+        waUrl?: string;
+        error?: string;
+      };
 
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data.success || !data.orderCode) {
         setError(data.error ?? "Terjadi kesalahan. Coba lagi.");
         return;
       }
 
-      // Build a lightweight proxy for WhatsApp URL generation
-      // (uses snapshot data — no full Prisma fetch needed client-side)
-      const mockOrder = {
-        orderCode: data.orderCode!,
-        customerName: form.customerName,
-        customerPhone: form.customerPhone,
-        customerAddress: form.customerAddress,
-        customerCity: form.customerCity,
-        customerProvince: form.customerProvince,
-        customerPostalCode: form.customerPostalCode,
-        notes: form.notes || null,
-        totalAmount: subtotal,
-      } as Order;
+      const safeWaUrl =
+        data.waUrl && /^https:\/\/wa\.me\/\d+/i.test(data.waUrl)
+          ? data.waUrl
+          : null;
 
-      const mockItems = items.map((i) => ({
-        productName: i.name,
-        productPrice: i.price,
-        quantity: i.quantity,
-        subtotal: i.price * i.quantity,
-      })) as OrderItem[];
-
-      setOrderCode(data.orderCode!);
-      setWaUrl(generateWhatsAppUrl(mockOrder, mockItems));
+      setOrderCode(data.orderCode);
+      setWaUrl(safeWaUrl);
       clearCart();
       setStep(2);
     } catch {
@@ -163,13 +199,13 @@ export default function CheckoutModal() {
 
       {/* Modal */}
       <div className="relative bg-white w-full max-w-lg max-h-[90vh] overflow-y-auto animate-fade-in-up border border-stone-200">
-
         {/* Header */}
         <div className="sticky top-0 bg-white z-10 flex items-center justify-between px-8 py-6 border-b border-stone-200">
           <h2 className="text-[11px] uppercase tracking-[0.2em] text-stone-900 font-normal">
             {step === 2 ? "Pesanan Dikonfirmasi" : "Checkout"}
           </h2>
           <button
+            type="button"
             onClick={handleClose}
             className="text-stone-400 hover:text-stone-900 transition-colors"
             aria-label="Tutup checkout"
@@ -183,7 +219,19 @@ export default function CheckoutModal() {
         <div className="px-8 py-8">
           {/* ── Step 1: Data Pengiriman ────────────────────── */}
           {step === 1 && (
-            <div>
+            <form onSubmit={(e) => void handleSubmit(e)} noValidate>
+              {/* Honeypot anti-bot field (wajib kosong) */}
+              <input
+                type="text"
+                name="_honeypot"
+                value={form._honeypot}
+                onChange={handleField}
+                className="hidden"
+                tabIndex={-1}
+                autoComplete="off"
+                aria-hidden="true"
+              />
+
               {/* Order Summary */}
               <div className="mb-8">
                 <p className="text-[11px] uppercase tracking-[0.15em] text-stone-500 font-normal mb-4">
@@ -214,33 +262,33 @@ export default function CheckoutModal() {
               <div className="space-y-4">
                 <div>
                   <label className="block text-[12px] text-stone-500 font-light mb-1.5">Nama Lengkap</label>
-                  <input name="customerName" value={form.customerName} onChange={handleField} type="text" placeholder="Nama penerima" className={inputClass} style={{ borderRadius: 0 }} />
+                  <input name="customerName" value={form.customerName} onChange={handleField} type="text" maxLength={100} required placeholder="Nama penerima" className={inputClass} style={{ borderRadius: 0 }} />
                 </div>
                 <div>
                   <label className="block text-[12px] text-stone-500 font-light mb-1.5">Nomor HP / WhatsApp</label>
-                  <input name="customerPhone" value={form.customerPhone} onChange={handleField} type="tel" placeholder="+62..." className={inputClass} style={{ borderRadius: 0 }} />
+                  <input name="customerPhone" value={form.customerPhone} onChange={handleField} type="tel" maxLength={20} required placeholder="+62..." className={inputClass} style={{ borderRadius: 0 }} />
                 </div>
                 <div>
                   <label className="block text-[12px] text-stone-500 font-light mb-1.5">Alamat Lengkap</label>
-                  <input name="customerAddress" value={form.customerAddress} onChange={handleField} type="text" placeholder="Jalan, RT/RW, Kelurahan" className={inputClass} style={{ borderRadius: 0 }} />
+                  <input name="customerAddress" value={form.customerAddress} onChange={handleField} type="text" maxLength={500} required placeholder="Jalan, RT/RW, Kelurahan" className={inputClass} style={{ borderRadius: 0 }} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[12px] text-stone-500 font-light mb-1.5">Kota</label>
-                    <input name="customerCity" value={form.customerCity} onChange={handleField} type="text" placeholder="Kota / Kabupaten" className={inputClass} style={{ borderRadius: 0 }} />
+                    <input name="customerCity" value={form.customerCity} onChange={handleField} type="text" maxLength={100} required placeholder="Kota / Kabupaten" className={inputClass} style={{ borderRadius: 0 }} />
                   </div>
                   <div>
                     <label className="block text-[12px] text-stone-500 font-light mb-1.5">Provinsi</label>
-                    <input name="customerProvince" value={form.customerProvince} onChange={handleField} type="text" placeholder="Provinsi" className={inputClass} style={{ borderRadius: 0 }} />
+                    <input name="customerProvince" value={form.customerProvince} onChange={handleField} type="text" maxLength={100} required placeholder="Provinsi" className={inputClass} style={{ borderRadius: 0 }} />
                   </div>
                 </div>
                 <div>
                   <label className="block text-[12px] text-stone-500 font-light mb-1.5">Kode Pos</label>
-                  <input name="customerPostalCode" value={form.customerPostalCode} onChange={handleField} type="text" placeholder="85xxx" className={inputClass} style={{ borderRadius: 0 }} />
+                  <input name="customerPostalCode" value={form.customerPostalCode} onChange={handleField} type="text" inputMode="numeric" maxLength={10} required placeholder="85xxx" className={inputClass} style={{ borderRadius: 0 }} />
                 </div>
                 <div>
                   <label className="block text-[12px] text-stone-500 font-light mb-1.5">Catatan (opsional)</label>
-                  <input name="notes" value={form.notes} onChange={handleField} type="text" placeholder="Instruksi khusus pengiriman" className={inputClass} style={{ borderRadius: 0 }} />
+                  <input name="notes" value={form.notes} onChange={handleField} type="text" maxLength={500} placeholder="Instruksi khusus pengiriman" className={inputClass} style={{ borderRadius: 0 }} />
                 </div>
               </div>
 
@@ -249,13 +297,13 @@ export default function CheckoutModal() {
               )}
 
               <button
-                onClick={handleSubmit}
+                type="submit"
                 disabled={loading}
-                className="w-full mt-8 py-4 bg-stone-900 text-white text-[11px] uppercase tracking-[0.15em] font-normal hover:bg-stone-800 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full mt-8 py-4 bg-stone-900 text-white text-[11px] uppercase tracking-[0.15em] font-normal hover:bg-stone-800 transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
               >
                 {loading ? "Memproses..." : "Konfirmasi & Buat Pesanan"}
               </button>
-            </div>
+            </form>
           )}
 
           {/* ── Step 2: Konfirmasi & WA Redirect ─────────── */}
@@ -292,6 +340,7 @@ export default function CheckoutModal() {
                 </a>
               )}
               <button
+                type="button"
                 onClick={handleClose}
                 className="text-[11px] uppercase tracking-[0.15em] text-stone-500 font-light border-b border-stone-300 pb-0.5 hover:text-stone-900 transition-colors"
               >

@@ -4,9 +4,18 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 
 const IMAGES = [
-  "/images/hero-bg-1.png",
-  "/images/hero-bg-2.png",
-  "/images/hero-bg-3.png",
+  {
+    src: "/images/hero-bg-1.jpg",
+    alt: "Pengrajin menenun kain Tenun Ikat tradisional NTT di bengkel kerja Kupang",
+  },
+  {
+    src: "/images/hero-bg-2.jpg",
+    alt: "Proses ukir dan penghalusan kayu jati karya warga binaan Lapas Kupang",
+  },
+  {
+    src: "/images/hero-bg-3.jpg",
+    alt: "Koleksi kriya lontar, ukiran tempurung kelapa, sasando, dan tenun ikat NTT",
+  },
 ];
 
 export default function HeroImageFader() {
@@ -15,33 +24,35 @@ export default function HeroImageFader() {
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentIndex((prev) => (prev + 1) % IMAGES.length);
-    }, 4000); // 4 seconds crossfade
+    }, 5000);
 
     return () => clearInterval(timer);
   }, []);
 
   return (
-    <div className="absolute inset-0 w-full h-full bg-stone-100 overflow-hidden z-0">
-      {/* Overlay to ensure text readability */}
-      <div className="absolute inset-0 bg-white/40 z-10 mix-blend-overlay" />
-      <div className="absolute inset-0 bg-stone-900/10 z-10" />
-      {IMAGES.map((src, index) => (
-        <div
-          key={src}
-          className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-            index === currentIndex ? "opacity-100" : "opacity-0"
-          }`}
-        >
-          <Image
-            src={src}
-            alt={`Hero background ${index + 1}`}
-            fill
-            className="object-cover"
-            priority={index === 0}
-            sizes="100vw"
-          />
-        </div>
-      ))}
+    <div className="absolute inset-0 w-full h-full bg-stone-200 overflow-hidden z-0">
+      {IMAGES.map((item, index) => {
+        const isActive = index === currentIndex;
+        return (
+          <div
+            key={item.src}
+            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+              isActive ? "opacity-100" : "opacity-0"
+            }`}
+          >
+            <Image
+              src={item.src}
+              alt={item.alt}
+              fill
+              className={`object-cover transition-transform duration-[5000ms] ease-out ${
+                isActive ? "scale-[1.03]" : "scale-100"
+              }`}
+              priority={index === 0}
+              sizes="100vw"
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

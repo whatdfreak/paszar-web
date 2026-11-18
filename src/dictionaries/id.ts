@@ -12,136 +12,174 @@ export const id: Dictionary = {
       home: "Beranda",
       shop: "Produk",
       artisans: "Pengrajin",
-      about: "Tentang",
+      about: "Tentang Kami",
     },
     cart: "Keranjang",
     search: "Cari",
+    searchBox: {
+      title: "Pencarian Katalog",
+      placeholder: "Apa yang ingin Anda cari? (mis. Tenun, Tas Rajut, Selendang, Kotak Tisu...)",
+      popularLabel: "Pencarian Populer",
+      popularTags: ["Tenun", "Tas Rajut", "Selendang", "Cake", "Bunga", "Kotak Tisu"],
+      recentLabel: "Pencarian Terakhir",
+      clearRecent: "Hapus",
+      submitHint: "Ketik untuk pratinjau cepat atau tekan Enter untuk melihat semua di katalog",
+      resultsLabel: "Produk Ditemukan",
+      noResults: "Tidak ditemukan produk yang cocok dengan kata kunci tersebut.",
+      viewAll: (q: string) => `Lihat semua hasil untuk "${q}"`,
+      close: "Tutup pencarian",
+    },
   },
 
   // ── Footer ──────────────────────────────────────────────────
   footer: {
-    brand: "PASzar",
+    brand: "PASZAR",
+    subtitle: "Karya Warga Binaan · Kupang, NTT",
     tagline:
-      "Platform kerajinan tangan warga binaan Lapas Kupang. Setiap pembelian adalah aksi nyata mendukung pemberdayaan.",
-    newsletter: {
-      label: "Newsletter",
-      placeholder: "Email Anda",
-      button: "Daftar",
-    },
+      "Etalase resmi kerajinan tangan warga binaan Lapas Kelas IIA & Rutan Kelas IIB Kupang. Setiap pemesanan melalui Koperasi memberikan apresiasi nyata dan bekal kemandirian bagi para perajin.",
+    cta: "Jelajahi Koleksi",
     sections: {
-      service: {
-        title: "Layanan Pelanggan",
-        links: ["Cara Pemesanan", "Pengiriman & Ongkir", "Kebijakan Pengembalian", "Hubungi Kami"],
-      },
-      company: {
-        title: "Tentang",
+      shop: {
+        title: "Koleksi Karya",
         links: [
-          { label: "Tentang Kami", href: "/#about" },
-          { label: "Para Pengrajin", href: "/#artisans" },
-          { label: "Produk Unggulan", href: "/katalog" },
-          { label: "Koperasi Lapas", href: "/#koperasi" },
+          { label: "Semua Karya", href: "/katalog" },
+          { label: "Tenun & Kriya Tekstil", href: "/katalog" },
+          { label: "Kriya Kayu & Miniatur", href: "/katalog" },
+          { label: "Anyaman Lontar & Dekorasi", href: "/katalog" },
         ],
       },
-      shop: {
-        title: "Produk",
+      company: {
+        title: "Tentang PASzar",
         links: [
-          { label: "Semua Produk", href: "/katalog" },
-          { label: "Kerajinan Tenun", href: "/katalog" },
-          { label: "Kuliner Khas", href: "/katalog" },
-          { label: "Anyaman & Ukir", href: "/katalog" },
+          { label: "Program Pembinaan", href: "/#about" },
+          { label: "Para Perajin", href: "/#artisans" },
+          { label: "Sinergi Kelembagaan", href: "/#partners" },
+        ],
+      },
+      care: {
+        title: "Layanan Koperasi",
+        links: [
+          { label: "Cara Pemesanan WhatsApp", href: "/katalog" },
+          { label: "Jaminan Karya Autentik", href: "/#about" },
+          { label: "Mitra & Dukungan Resmi", href: "/#partners" },
         ],
       },
     },
     copyright: (year: number) =>
-      `© ${year} PASzar — Koperasi Lapas Kupang, Kanwil Kemenkumham NTT.`,
+      `© ${year} PASzar — Koperasi Pemasyarakatan Lapas & Rutan Kupang, NTT.`,
     rights: "Hak Cipta Dilindungi",
   },
 
   // ── Landing Page ─────────────────────────────────────────────
   page: {
-    // Hero
     hero: {
       eyebrow: "Kerajinan Tangan — Oleh WBP, NTT",
       title: "Dari Proses Pembinaan,\nLahir Karya Bernilai",
-      desc: "Dari proses pembinaan, waktu diubah menjadi kesempatan untuk menghasilkan karya yang bernilai — setiap produk adalah bukti nyata tekad dan tujuan.",
+      desc: "Dari proses pembinaan kemandirian, waktu diubah menjadi keahlian nyata — setiap produk adalah bukti tekad, keterampilan, dan harapan baru.",
       cta: "Jelajahi Koleksi",
       story: "Kisah Kami",
     },
 
-    // Artisan section
     artisans: {
       eyebrow: "Para Pengrajin",
       title: "Dibuat Oleh WBP",
       categories: [
         {
-          image: "/images/product-chair.png",
-          title: "Makanan",
-          desc: "Kuliner khas lokal yang dibuat dengan resep turun-temurun — cita rasa warisan NTT dalam setiap sajian.",
+          image: "/images/product-tenun.jpg",
+          title: "Tenun & Tekstil Tradisional",
+          desc: "Kain tenun dan kerajinan bercorak warisan Nusa Tenggara Timur yang dikerjakan tekun di ruang pembinaan.",
         },
         {
-          image: "/images/product-tenun.png",
-          title: "Furnitur",
-          desc: "Furnitur jati dan mahoni solid, diukir tangan oleh pengrajin terampil yang dilatih dalam program rehabilitasi.",
+          image: "/images/product-chair.jpg",
+          title: "Kriya Kayu & Miniatur",
+          desc: "Kursi kayu, pigura ukir, miniatur Sasando, hingga miniatur motor kayu karya bengkel kerja Kupang.",
         },
         {
-          image: "/images/product-rattan.png",
-          title: "Sayuran",
-          desc: "Hasil panen segar yang ditanam secara organik sebagai bagian dari inisiatif rehabilitasi pertanian.",
+          image: "/images/product-rattan.jpg",
+          title: "Anyaman & Kuliner Khas",
+          desc: "Dulang, kotak sirih, kotak tisu, gantungan tempurung kelapa, hingga keripik pakcoy higienis olahan WBP.",
         },
       ],
     },
 
-    // Featured products section
     featured: {
       eyebrow: "Pilihan Terkurasi",
-      title: "Kreasi Lainnya",
+      title: "Karya Unggulan",
       viewAll: "Lihat Semua",
       viewAllMobile: "Lihat Semua Produk",
       empty: "Belum ada produk tersedia.",
-      emptyHint: "Produk akan ditampilkan setelah admin menambahkannya.",
+      emptyHint: "Produk akan ditampilkan setelah admin koperasi menerbitkannya.",
     },
 
-    // Trust bar
     trust: [
       {
-        title: "Setiap Pembelian Berarti",
-        desc: "Mendukung langsung program rehabilitasi warga binaan",
+        title: "Karya Asli Warga Binaan",
+        desc: "Diproduksi langsung di bengkel kerja Lapas Kelas IIA & Rutan Kelas IIB Kupang",
       },
       {
-        title: "Dibuat untuk Bertahan",
-        desc: "Handmade dengan bahan-bahan alami premium pilihan",
+        title: "Kriya, Miniatur & Kuliner",
+        desc: "Mencakup dulang, kotak sirih, sasando, pigura, bunga hias, kursi, hingga keripik pakcoy",
       },
       {
-        title: "Tenun",
-        desc: "Tenun ikat tradisional menggunakan pewarna alami dari tanaman lokal NTT",
+        title: "100% Mendukung Pembinaan",
+        desc: "Setiap pembelian mendukung pelatihan kemandirian dan premi karya warga binaan",
       },
       {
-        title: "Pengiriman ke Seluruh Indonesia",
-        desc: "Dikemas dengan hati-hati, dikirim ke seluruh pelosok nusantara",
+        title: "Transaksi Resmi Koperasi",
+        desc: "Pemesanan diverifikasi langsung melalui layanan WhatsApp Koperasi Pemasyarakatan",
       },
     ],
 
-    // About / Story section
     about: {
-      eyebrow: "Pembinaan",
-      title: "Pembinaan Melalui\nKarya dan Tujuan",
-      tagline: "Kreativitas Tanpa Batas, dari Pemasyarakatan Untuk Indonesia",
-      body: [
-        "PASzar adalah platform yang didedikasikan untuk memamerkan barang kerajinan tangan luar biasa yang diproduksi melalui program rehabilitasi di Lapas Kupang, Nusa Tenggara Timur. Setiap pembelian langsung mendukung para pengrajin dalam membangun masa depan yang berkelanjutan.",
-        "Melalui pelatihan intensif dalam pertukangan kayu, tenun tekstil, seni kuliner, dan kerajinan tangan, para pembuat karya kami mengembangkan keterampilan yang mengubah kehidupan dan melestarikan warisan budaya NTT.",
-      ],
-      features: [
-        { title: "Pelatihan Profesional", desc: "Instruktur bersertifikat" },
-        { title: "Kualitas Terjamin", desc: "Standar produksi ketat" },
-        { title: "Dampak Sosial", desc: "Mendukung rehabilitasi" },
-        { title: "Berkelanjutan", desc: "Material ramah lingkungan" },
+      slides: [
+        {
+          title: "Karya Tangan Penuh Makna",
+          body: "Setiap karya lahir dari ketekunan para perajin warga binaan di Kupang yang mengasah keahlian baru. Lebih dari sekadar benda pakai, setiap detail membawa cerita tentang harapan, martabat, dan kesempatan kedua.",
+          image: "/images/hero-bg-1.jpg",
+        },
+        {
+          title: "Material Alami & Daur Ulang",
+          body: "Lebih dari 80% koleksi kami mengolah bahan lokal seperti kayu jati, daun lontar, dan tempurung kelapa, serta mendaur ulang material pilihan secara bertanggung jawab untuk menghadirkan karya fungsional dalam keseharian Anda.",
+          image: "/images/product-rattan.jpg",
+        },
+        {
+          title: "Merawat Warisan Budaya NTT",
+          body: "Kami memadukan kearifan kriya tradisional Nusa Tenggara Timur dengan desain yang relevan masa kini. Dari tenun ikat, anyaman dulang, hingga miniatur Sasando yang dikerjakan dengan ketelitian tangan.",
+          image: "/images/product-tenun.jpg",
+        },
+        {
+          title: "Mendukung Kemandirian Nyata",
+          body: "Kami berkolaborasi bersama Koperasi Pemasyarakatan untuk memastikan apresiasi yang adil bagi setiap perajin, sekaligus menjadi bekal keahlian mandiri saat mereka kembali ke masyarakat.",
+          image: "/images/product-chair.jpg",
+        },
       ],
     },
 
-    // Partners
     partners: {
-      eyebrow: "Mitra & Dukungan",
-      names: ["Kemenkumham RI", "Pemprov NTT", "UMKM Indonesia", "Koperasi Lapas"],
+      eyebrow: "Mitra & Dukungan Resmi",
+      title: "Sinergi Kelembagaan Pemasyarakatan NTT",
+      items: [
+        {
+          code: "imipas",
+          name: "Kementerian Imigrasi & Pemasyarakatan RI",
+          role: "Direktorat Jenderal Pemasyarakatan — Kanwil NTT",
+        },
+        {
+          code: "lapas",
+          name: "Lapas Kelas IIA & Lapas Perempuan Kelas IIB Kupang",
+          role: "Bengkel Kerja & Pembinaan Kemandirian",
+        },
+        {
+          code: "rutan",
+          name: "Rutan Kelas IIB Kupang",
+          role: "Unit Kemandirian & Karya Daur Ulang",
+        },
+        {
+          code: "koperasi",
+          name: "Koperasi Pemasyarakatan",
+          role: "Pengelola Resmi Pemasaran & Pesanan WBP",
+        },
+      ],
       hashtag: "#pemasyarakatanNTT",
     },
   },
@@ -171,6 +209,10 @@ export const id: Dictionary = {
       name: "A — Z",
     },
     count: (n: number) => `${n} produk`,
+    showingRange: (start: number, end: number, total: number) =>
+      `Menampilkan ${start}–${end} dari ${total} produk`,
+    prevPage: "Sebelumnya",
+    nextPage: "Berikutnya",
     empty: "Tidak ada produk yang sesuai filter.",
     clearFilters: "Hapus filter",
     showProducts: (n: number) => `Tampilkan ${n} Produk`,
@@ -184,9 +226,12 @@ export const id: Dictionary = {
     outOfStock: "Stok habis",
     addToCart: "Tambah ke Keranjang",
     buyNow: "Beli Sekarang",
+    buyExternal: "Beli di Website Asal",
+    externalNotice:
+      "Pembelian produk ini dilayani langsung melalui halaman produk resmi di website asal.",
     description: "Deskripsi",
     story: "Kisah Produk",
-    badges: ["Produk Autentik", "Pengiriman Aman", "Kualitas Terjamin"],
+    badges: ["Karya Autentik WBP", "Pesanan Resmi Koperasi", "Kualitas Terkurasi"],
     related: {
       eyebrow: "Mungkin Anda Suka",
       title: "Produk Terkait",

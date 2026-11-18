@@ -1,5 +1,7 @@
+import { Suspense } from "react";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
+import { syncFlobakaryaCatalog } from "@/lib/flobakarya-sync";
 import KatalogClient from "@/components/public/KatalogClient";
 import type { ProductCardData } from "@/components/public/ProductCard";
 
@@ -23,9 +25,11 @@ export const metadata: Metadata = {
 };
 
 
-export const revalidate = 1800;
+export const revalidate = 300;
 
 export default async function KatalogPage() {
+  void syncFlobakaryaCatalog({ force: false });
+
   const [rawProducts, rawCategories] = await Promise.all([
     prisma.product.findMany({
       where: { isActive: true },
@@ -36,6 +40,9 @@ export default async function KatalogPage() {
         slug: true,
         price: true,
         image: true,
+        galleryEnabled: true,
+        images: true,
+        externalUrl: true,
         category: { select: { name: true } },
       },
     }),
@@ -56,7 +63,10 @@ export default async function KatalogPage() {
     slug: p.slug,
     price: p.price,
     image: p.image,
+    galleryEnabled: p.galleryEnabled,
+    images: p.images,
     category: p.category.name,
+    externalUrl: p.externalUrl,
   }));
 
   const categories = rawCategories.map((c) => ({
@@ -66,5 +76,9 @@ export default async function KatalogPage() {
     _count: { products: c._count.products },
   }));
 
-  return <KatalogClient products={products} categories={categories} />;
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-white" />}>
+      <KatalogClient products={products} categories={categories} />
+    </Suspense>
+  );
 }

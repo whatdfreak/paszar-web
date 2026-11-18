@@ -29,6 +29,9 @@ async function getFeaturedProducts(): Promise<ProductCardData[]> {
       slug: true,
       price: true,
       image: true,
+      galleryEnabled: true,
+      images: true,
+      externalUrl: true,
       category: { select: { name: true } },
     },
   });
@@ -39,7 +42,10 @@ async function getFeaturedProducts(): Promise<ProductCardData[]> {
     slug: p.slug,
     price: p.price,
     image: p.image,
+    galleryEnabled: p.galleryEnabled,
+    images: p.images,
     category: p.category.name,
+    externalUrl: p.externalUrl,
   }));
 }
 

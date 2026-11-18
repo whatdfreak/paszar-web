@@ -4,9 +4,9 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 
 const SLIDES = [
-  { src: "/images/product-tenun.png", alt: "Tenun Ikat NTT — karya pengrajin lapas" },
-  { src: "/images/product-chair.png", alt: "Furnitur kayu jati ukiran tangan" },
-  { src: "/images/product-rattan.png", alt: "Anyaman rotan dan kerajinan tangan" },
+  { src: "/images/product-tenun.jpg", alt: "Tenun Ikat NTT — karya pengrajin lapas" },
+  { src: "/images/product-chair.jpg", alt: "Furnitur kayu jati ukiran tangan" },
+  { src: "/images/product-rattan.jpg", alt: "Anyaman rotan dan kerajinan tangan" },
 ];
 
 export default function HeroSlider() {

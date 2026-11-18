@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const MAX_GALLERY_IMAGES = 16;
+
 const isValidImagePathOrUrl = (val: string): boolean => {
   if (val.startsWith("/uploads/")) {
     return /^\/uploads\/products\/[a-zA-Z0-9-]+\.(jpg|png|webp)$/.test(val);
@@ -12,8 +14,15 @@ const isValidImagePathOrUrl = (val: string): boolean => {
   }
 };
 
-// ── Create ────────────────────────────────────────────────────
-export const CreateProductSchema = z.object({
+const galleryImageItemSchema = z
+  .string()
+  .trim()
+  .min(1, "URL gambar galeri tidak boleh kosong.")
+  .refine(isValidImagePathOrUrl, {
+    message: "Format gambar galeri tidak valid.",
+  });
+
+const BaseProductSchema = z.object({
   name: z
     .string()
     .trim()
@@ -48,11 +57,47 @@ export const CreateProductSchema = z.object({
     .refine(isValidImagePathOrUrl, {
       message: "Format gambar tidak valid.",
     }),
+  galleryEnabled: z.boolean().default(false),
+  images: z
+    .array(galleryImageItemSchema)
+    .max(MAX_GALLERY_IMAGES, `Maksimal ${MAX_GALLERY_IMAGES} foto galeri tambahan.`)
+    .default([]),
+  externalUrl: z
+    .string()
+    .trim()
+    .max(500, "URL maksimal 500 karakter.")
+    .refine(
+      (val) => {
+        if (val === "") return true;
+        try {
+          const parsed = new URL(val);
+          return parsed.protocol === "https:" || parsed.protocol === "http:";
+        } catch {
+          return false;
+        }
+      },
+      {
+        message:
+          "Format URL pembelian eksternal tidak valid (gunakan https://).",
+      }
+    )
+    .optional()
+    .nullable(),
   isActive: z.boolean().default(true),
 });
 
+// ── Create ────────────────────────────────────────────────────
+export const CreateProductSchema = BaseProductSchema.refine(
+  (data) => !data.galleryEnabled || data.images.length > 0,
+  {
+    message:
+      "Tambahkan minimal 1 foto galeri tambahan atau nonaktifkan Galeri Multi-Foto.",
+    path: ["images"],
+  }
+);
+
 // ── Update (partial) ─────────────────────────────────────────
-export const UpdateProductSchema = CreateProductSchema.partial().extend({
+export const UpdateProductSchema = BaseProductSchema.partial().extend({
   id: z.string().cuid("ID tidak valid."),
 });
 

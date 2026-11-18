@@ -10,6 +10,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcrypt";
+import { FLOBAKARYA_PRODUCTS } from "./flobakarya-products";
 
 const prisma = new PrismaClient();
 
@@ -264,6 +265,35 @@ async function main() {
   ]);
 
   console.log("   ✓ 10 produk unggulan dibuat.\n");
+
+  console.log("📦 Membuat 29 produk mitra FLOBAKARYA (Lapas Perempuan Kelas IIB Kupang)...");
+  const flobaCategoryMap = {
+    "tenun-tradisional": katTenun.id,
+    "kerajinan-tangan": katKerajinan.id,
+    "kuliner-hasil-tani": katKuliner.id,
+  } as const;
+
+  await Promise.all(
+    FLOBAKARYA_PRODUCTS.map((item) =>
+      prisma.product.create({
+        data: {
+          name: item.name,
+          slug: item.slug,
+          description: item.description,
+          story: item.story,
+          price: item.price,
+          stock: item.stock,
+          image: item.image,
+          galleryEnabled: item.galleryEnabled,
+          images: item.images,
+          externalUrl: item.externalUrl,
+          isActive: true,
+          categoryId: flobaCategoryMap[item.categorySlug],
+        },
+      })
+    )
+  );
+  console.log(`   ✓ ${FLOBAKARYA_PRODUCTS.length} produk FLOBAKARYA dibuat.\n`);
 
   // ── 5. RINGKASAN ────────────────────────────────────────────────────
   const [totalProducts, totalCategories, totalAdmin] = await Promise.all([

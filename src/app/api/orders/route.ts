@@ -2,11 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { CheckoutSchema } from "@/validations/order.schema";
+import { generateWhatsAppUrl } from "@/lib/whatsapp";
 
 // ── In-memory idempotency store (MVP — sufficient for low-traffic) ─────────
-// Key: idempotencyKey string  |  Value: { orderCode, timestamp }
+// Key: idempotencyKey string  |  Value: { orderCode, waUrl, timestamp }
 // TTL: 10 minutes — cukup mencegah double-submit satu sesi checkout
-const idempotencyCache = new Map<string, { orderCode: string; timestamp: number }>();
+const idempotencyCache = new Map<
+  string,
+  { orderCode: string; waUrl: string; timestamp: number }
+>();
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000; // 10 menit
 
 function pruneIdempotencyCache() {
@@ -19,8 +23,6 @@ function pruneIdempotencyCache() {
 }
 
 // ── Cryptographic Order Code Generator ────────────────────────────────────
-// Menggunakan crypto.randomBytes — CSPRNG, bukan Math.random() yang lemah.
-// Format: PZ-YYYYMMDD-XXXXXX (6 hex chars dari 3 random bytes)
 function generateOrderCode(): string {
   const date = new Date().toISOString().slice(0, 10).replace(/-/g, ""); // YYYYMMDD
   const random = randomBytes(3).toString("hex").toUpperCase(); // 6 hex chars
@@ -30,15 +32,24 @@ function generateOrderCode(): string {
 // ── POST /api/orders ───────────────────────────────────────────────────────
 // Public endpoint — tidak butuh autentikasi.
 // Perlindungan:
-//   1. Zod validation (format & range input)
-//   2. Server-side price & stock verification (anti-manipulation)
+//   1. Zod validation (termasuk honeypot anti-bot & range input)
+//   2. Server-side price & stock verification (termasuk agregasi productId ganda)
 //   3. Idempotency Key (anti double-submit)
 //   4. Atomic $transaction untuk Order + OrderItems
+//   5. Generate waUrl di server (ADMIN_WHATSAPP_NUMBER / StoreSetting aman)
 
 export async function POST(request: NextRequest) {
+  let body: unknown;
   try {
-    const body = await request.json();
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: "Format permintaan tidak valid." },
+      { status: 400 }
+    );
+  }
 
+  try {
     // ── 1. Zod Validation ──────────────────────────────────────────────────
     const parsed = CheckoutSchema.safeParse(body);
     if (!parsed.success) {
@@ -56,75 +67,96 @@ export async function POST(request: NextRequest) {
       customerProvince,
       customerPostalCode,
       notes,
+      _honeypot,
       items,
     } = parsed.data;
 
+    if (_honeypot.trim().length > 0) {
+      return NextResponse.json(
+        { success: false, error: "Permintaan tidak valid." },
+        { status: 400 }
+      );
+    }
+
     // ── 2. Idempotency Check ────────────────────────────────────────────────
-    // Jika klien mengirim X-Idempotency-Key yang sama dua kali (double-submit / lag),
-    // kembalikan result yang sama tanpa membuat pesanan baru.
     const idempotencyKey = request.headers.get("X-Idempotency-Key");
     if (idempotencyKey) {
-      pruneIdempotencyCache(); // bersihkan entry kadaluarsa
+      pruneIdempotencyCache();
       const cached = idempotencyCache.get(idempotencyKey);
       if (cached) {
         return NextResponse.json(
-          { success: true, orderCode: cached.orderCode },
-          { status: 200 } // 200 OK (bukan 201) — menandakan ini idempoten
+          {
+            success: true,
+            orderCode: cached.orderCode,
+            waUrl: cached.waUrl,
+          },
+          { status: 200 }
         );
       }
     }
 
     // ── 3. SERVER-SIDE PRICE & STOCK VERIFICATION ─────────────────────────
-    // JANGAN percaya harga atau ID dari client. Ambil data aktual dari DB.
-    const productIds = items.map((i) => i.productId);
+    const qtyByProductId = new Map<string, number>();
+    for (const item of items) {
+      qtyByProductId.set(
+        item.productId,
+        (qtyByProductId.get(item.productId) ?? 0) + item.quantity
+      );
+    }
+    const productIds = Array.from(qtyByProductId.keys());
 
-    const dbProducts = await prisma.product.findMany({
-      where: {
-        id: { in: productIds },
-        isActive: true, // Tolak produk yang tidak aktif / sudah dihapus
-      },
-      select: { id: true, name: true, price: true, stock: true },
-    });
+    const [dbProducts, storeSetting] = await Promise.all([
+      prisma.product.findMany({
+        where: {
+          id: { in: productIds },
+          isActive: true,
+        },
+        select: { id: true, name: true, price: true, stock: true },
+      }),
+      prisma.storeSetting.findUnique({
+        where: { id: "default" },
+        select: { whatsappNumber: true },
+      }),
+    ]);
 
-    // Buat map untuk lookup O(1)
     const productMap = new Map(dbProducts.map((p) => [p.id, p]));
 
-    // Validasi setiap item
     for (const item of items) {
       const dbProduct = productMap.get(item.productId);
 
-      // Produk tidak ditemukan atau tidak aktif
       if (!dbProduct) {
         return NextResponse.json(
-          { success: false, error: `Produk tidak tersedia: "${item.productName}". Silakan refresh halaman.` },
+          {
+            success: false,
+            error: `Produk tidak tersedia: "${item.productName}". Silakan refresh halaman.`,
+          },
           { status: 409 }
         );
       }
 
-      // Deteksi manipulasi harga
       if (dbProduct.price !== item.productPrice) {
         return NextResponse.json(
           {
             success: false,
             error: `Harga produk "${dbProduct.name}" telah berubah. Silakan refresh halaman dan coba lagi.`,
           },
-          { status: 409 } // 409 Conflict — data sudah stale
+          { status: 409 }
         );
       }
 
-      // Stok tidak cukup saat order dibuat
-      if (dbProduct.stock < item.quantity) {
+      const requestedTotalQty = qtyByProductId.get(item.productId) ?? item.quantity;
+      if (dbProduct.stock < requestedTotalQty) {
         return NextResponse.json(
           {
             success: false,
-            error: `Stok "${dbProduct.name}" tidak mencukupi. Tersisa ${dbProduct.stock} pcs, diminta ${item.quantity} pcs.`,
+            error: `Stok "${dbProduct.name}" tidak mencukupi. Tersisa ${dbProduct.stock} pcs, diminta ${requestedTotalQty} pcs.`,
           },
           { status: 409 }
         );
       }
     }
 
-    // Hitung ulang total DARI DATA SERVER — tidak dari client sama sekali
+    // Hitung ulang total DARI DATA SERVER
     const totalAmount = items.reduce((sum, item) => {
       const dbProduct = productMap.get(item.productId)!;
       return sum + dbProduct.price * item.quantity;
@@ -132,8 +164,6 @@ export async function POST(request: NextRequest) {
 
     // ── 4. Generate Order Code (Cryptographic) ─────────────────────────────
     let orderCode = generateOrderCode();
-
-    // Sangat kecil kemungkinan clash, tapi tetap handle
     let attempts = 0;
     while (attempts < 5) {
       const existing = await prisma.order.findUnique({ where: { orderCode } });
@@ -153,44 +183,53 @@ export async function POST(request: NextRequest) {
           customerCity,
           customerProvince,
           customerPostalCode,
-          notes,
+          notes: notes || null,
           totalAmount,
           items: {
             create: items.map((item) => {
               const dbProduct = productMap.get(item.productId)!;
               return {
                 productId: item.productId,
-                productName: dbProduct.name,   // Gunakan nama dari DB, bukan client
-                productPrice: dbProduct.price, // Gunakan harga dari DB, bukan client
+                productName: dbProduct.name,
+                productPrice: dbProduct.price,
                 quantity: item.quantity,
-                subtotal: dbProduct.price * item.quantity, // Hitung ulang di server
+                subtotal: dbProduct.price * item.quantity,
               };
             }),
           },
         },
-        select: {
-          id: true,
-          orderCode: true,
+        include: {
+          items: true,
         },
       });
     });
+
+    const waUrl = generateWhatsAppUrl(
+      order,
+      order.items,
+      storeSetting?.whatsappNumber
+    );
 
     // ── 6. Simpan ke idempotency cache ────────────────────────────────────
     if (idempotencyKey) {
       idempotencyCache.set(idempotencyKey, {
         orderCode: order.orderCode,
+        waUrl,
         timestamp: Date.now(),
       });
     }
 
     return NextResponse.json(
-      { success: true, orderCode: order.orderCode },
+      { success: true, orderCode: order.orderCode, waUrl },
       { status: 201 }
     );
   } catch (err) {
     console.error("[POST /api/orders]", err);
     return NextResponse.json(
-      { success: false, error: "Terjadi kesalahan saat memproses pesanan. Silakan coba lagi." },
+      {
+        success: false,
+        error: "Terjadi kesalahan saat memproses pesanan. Silakan coba lagi.",
+      },
       { status: 500 }
     );
   }

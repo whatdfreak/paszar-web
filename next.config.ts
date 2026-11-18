@@ -10,7 +10,7 @@ const ContentSecurityPolicy = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
-  "img-src 'self' data: blob: https://via.placeholder.com https://placehold.co https://*.supabase.co https://*.supabase.in https://res.cloudinary.com",
+  "img-src 'self' data: blob: https://via.placeholder.com https://placehold.co https://*.supabase.co https://*.supabase.in https://res.cloudinary.com https://flobakarya.com",
   "connect-src 'self' https://*.supabase.co https://*.supabase.in",
   "media-src 'self'",
   "object-src 'none'",
@@ -124,6 +124,8 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "*.supabase.in" },
       // Cloudinary — optional CDN fallback
       { protocol: "https", hostname: "res.cloudinary.com" },
+      // Flobakarya — katalog mitra Lapas Perempuan Kupang
+      { protocol: "https", hostname: "flobakarya.com" },
     ],
   },
 };

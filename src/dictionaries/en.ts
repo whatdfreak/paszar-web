@@ -2,26 +2,51 @@
 // PASzar — English Dictionary
 // ============================================================
 
-// Helper types — define the shape structurally, not as string literals
 type TrustItem = { title: string; desc: string };
-type Feature = { title: string; desc: string };
 type NavLink = { label: string; href: string };
+type PartnerCode = "imipas" | "lapas" | "rutan" | "koperasi";
+type PartnerItem = { code: PartnerCode; name: string; role: string };
+
+export interface GuidanceSlide {
+  title: string;
+  body: string;
+  image: string;
+}
 
 export interface Dictionary {
   header: {
     brand: string;
-    nav: { home: string; shop: string; artisans: string; about: string };
+    nav: {
+      home: string;
+      shop: string;
+      artisans: string;
+      about: string;
+    };
     cart: string;
     search: string;
+    searchBox: {
+      title: string;
+      placeholder: string;
+      popularLabel: string;
+      popularTags: readonly string[];
+      recentLabel: string;
+      clearRecent: string;
+      submitHint: string;
+      resultsLabel: string;
+      noResults: string;
+      viewAll: (q: string) => string;
+      close: string;
+    };
   };
   footer: {
     brand: string;
+    subtitle: string;
     tagline: string;
-    newsletter: { label: string; placeholder: string; button: string };
+    cta: string;
     sections: {
-      service: { title: string; links: readonly string[] };
-      company: { title: string; links: readonly NavLink[] };
       shop: { title: string; links: readonly NavLink[] };
+      company: { title: string; links: readonly NavLink[] };
+      care: { title: string; links: readonly NavLink[] };
     };
     copyright: (year: number) => string;
     rights: string;
@@ -43,13 +68,14 @@ export interface Dictionary {
     };
     trust: readonly TrustItem[];
     about: {
+      slides: readonly GuidanceSlide[];
+    };
+    partners: {
       eyebrow: string;
       title: string;
-      tagline: string;
-      body: readonly string[];
-      features: readonly Feature[];
+      items: readonly PartnerItem[];
+      hashtag: string;
     };
-    partners: { eyebrow: string; names: readonly string[]; hashtag: string };
   };
   katalog: {
     breadcrumb: { home: string; shop: string };
@@ -64,6 +90,9 @@ export interface Dictionary {
     };
     sort: { label: string; priceAsc: string; priceDesc: string; name: string };
     count: (n: number) => string;
+    showingRange: (start: number, end: number, total: number) => string;
+    prevPage: string;
+    nextPage: string;
     empty: string;
     clearFilters: string;
     showProducts: (n: number) => string;
@@ -75,6 +104,8 @@ export interface Dictionary {
     outOfStock: string;
     addToCart: string;
     buyNow: string;
+    buyExternal: string;
+    externalNotice: string;
     description: string;
     story: string;
     badges: readonly string[];
@@ -88,138 +119,176 @@ export const en: Dictionary = {
     brand: "PASzar",
     nav: {
       home: "Home",
-      shop: "Shop",
+      shop: "Products",
       artisans: "Artisans",
-      about: "About",
+      about: "Guidance",
     },
     cart: "Cart",
     search: "Search",
+    searchBox: {
+      title: "Search Catalog",
+      placeholder: "What craft are you looking for? (e.g. Tenun, Crochet Bag, Tissue Box...)",
+      popularLabel: "Popular Searches",
+      popularTags: ["Tenun", "Tas Rajut", "Selendang", "Cake", "Bunga", "Kotak Tisu"],
+      recentLabel: "Recent Searches",
+      clearRecent: "Clear",
+      submitHint: "Type to preview or press Enter to view all in catalog",
+      resultsLabel: "Matching Products",
+      noResults: "No matching products found for your keyword.",
+      viewAll: (q: string) => `View all results for "${q}"`,
+      close: "Close search",
+    },
   },
 
   // ── Footer ──────────────────────────────────────────────────
   footer: {
-    brand: "PASzar",
+    brand: "PASZAR",
+    subtitle: "Crafted by Guided Artisans · Kupang, NTT",
     tagline:
-      "A platform for handcrafted goods made by inmates of Lapas Kupang. Every purchase is a real act of supporting empowerment.",
-    newsletter: {
-      label: "Newsletter",
-      placeholder: "Your email",
-      button: "Subscribe",
-    },
+      "Official showcase of handcrafted works by guided artisans at Lapas Kelas IIA & Rutan Kelas IIB Kupang. Every order through the Cooperative delivers fair appreciation and lasting independence.",
+    cta: "Explore Collection",
     sections: {
-      service: {
-        title: "Customer Service",
-        links: ["How to Order", "Shipping & Postage", "Return Policy", "Contact Us"],
-      },
-      company: {
-        title: "About",
+      shop: {
+        title: "Craft Collection",
         links: [
-          { label: "About Us", href: "/#about" },
-          { label: "The Artisans", href: "/#artisans" },
-          { label: "Featured Products", href: "/katalog" },
-          { label: "Lapas Cooperative", href: "/#koperasi" },
+          { label: "All Creations", href: "/katalog" },
+          { label: "Tenun & Textile Craft", href: "/katalog" },
+          { label: "Woodcraft & Miniatures", href: "/katalog" },
+          { label: "Lontar Weaving & Decor", href: "/katalog" },
         ],
       },
-      shop: {
-        title: "Products",
+      company: {
+        title: "About PASzar",
         links: [
-          { label: "All Products", href: "/katalog" },
-          { label: "Woven Textiles", href: "/katalog" },
-          { label: "Local Culinary", href: "/katalog" },
-          { label: "Crafts & Carvings", href: "/katalog" },
+          { label: "Guidance Programme", href: "/#about" },
+          { label: "The Artisans", href: "/#artisans" },
+          { label: "Institutional Synergy", href: "/#partners" },
+        ],
+      },
+      care: {
+        title: "Cooperative Desk",
+        links: [
+          { label: "WhatsApp Ordering Guide", href: "/katalog" },
+          { label: "Authenticity Guarantee", href: "/#about" },
+          { label: "Official Partners", href: "/#partners" },
         ],
       },
     },
     copyright: (year: number) =>
-      `© ${year} PASzar — Cooperative of Lapas Kupang, Kanwil Kemenkumham NTT.`,
+      `© ${year} PASzar — Koperasi Pemasyarakatan Lapas & Rutan Kupang, NTT.`,
     rights: "All Rights Reserved",
   },
 
   // ── Landing Page ─────────────────────────────────────────────
   page: {
-    // Hero
     hero: {
       eyebrow: "Handcrafted Goods — By WBP, NTT",
       title: "From Guidance,\nComes Creation.",
-      desc: "From the rehabilitation process, time is transformed into an opportunity to produce valuable creations — each piece a testament to purpose and perseverance.",
+      desc: "Through structured correctional guidance, time is transformed into craftsmanship — every piece is tangible proof of perseverance, dignity, and purpose.",
       cta: "Explore Collection",
       story: "Our Story",
     },
 
-    // Artisan section
     artisans: {
       eyebrow: "The Makers",
       title: "Crafted By WBP",
       categories: [
         {
-          image: "/images/product-chair.png",
-          title: "Food",
-          desc: "Local culinary specialties crafted with time-honoured recipes — a taste of NTT heritage in every bite.",
+          image: "/images/product-tenun.jpg",
+          title: "Tenun & Heritage Textiles",
+          desc: "Traditional East Nusa Tenggara woven crafts and cultural motifs crafted with care inside the empowerment studio.",
         },
         {
-          image: "/images/product-tenun.png",
-          title: "Furniture",
-          desc: "Solid teak and mahogany furniture, hand-carved by skilled artisans trained within the rehabilitation programme.",
+          image: "/images/product-chair.jpg",
+          title: "Woodcraft & Miniatures",
+          desc: "Hand-shaped teak seating, carved picture frames, Sasando miniatures, and timber crafts built in the Kupang carpentry workshop.",
         },
         {
-          image: "/images/product-rattan.png",
-          title: "Vegetables",
-          desc: "Fresh, organically grown produce cultivated as part of the agricultural rehabilitation initiative.",
+          image: "/images/product-rattan.jpg",
+          title: "Woven Crafts & Local Culinary",
+          desc: "Lontar dulang baskets, betel boxes, coconut shell keychains, and hygienic local snacks curated by the cooperative.",
         },
       ],
     },
 
-    // Featured products section
     featured: {
       eyebrow: "Curated Selection",
-      title: "Other Creations",
+      title: "Featured Creations",
       viewAll: "View All",
       viewAllMobile: "View All Products",
       empty: "No products available yet.",
-      emptyHint: "Products will appear once the admin adds them.",
+      emptyHint: "Products will appear once the cooperative admin publishes them.",
     },
 
-    // Trust bar
     trust: [
       {
-        title: "Every Purchase Matters",
-        desc: "Directly supporting the rehabilitation programme of WBP",
+        title: "Authentic Inmate Craft",
+        desc: "Handcrafted inside the workshops of Lapas Kelas IIA & Rutan Kelas IIB Kupang",
       },
       {
-        title: "Built to Last",
-        desc: "Handmade with premium natural materials",
+        title: "Curated Local Works",
+        desc: "From wooden Sasando, dulang & betel boxes to furniture, florals, and pakcoy crisps",
       },
       {
-        title: "Tenun",
-        desc: "Traditional ikat weaving using natural dyes from local NTT plants",
+        title: "Supports Rehabilitation",
+        desc: "Proceeds directly fund vocational skill training and artisan compensation",
       },
       {
-        title: "Nationwide Delivery",
-        desc: "Carefully packed and shipped across the archipelago",
+        title: "Official Cooperative Order",
+        desc: "Orders are verified directly via the correctional cooperative WhatsApp desk",
       },
     ],
 
-    // About / Story section
     about: {
-      eyebrow: "Guidance",
-      title: "Guidance Through\nCraft and Purpose",
-      tagline: "Kreativitas Tanpa Batas, dari Pemasyarakatan Untuk Indonesia",
-      body: [
-        "PASzar is a platform dedicated to showcasing exceptional handcrafted goods produced through rehabilitation programmes at Lapas Kupang, Nusa Tenggara Timur. Every purchase directly supports the artisans in building a sustainable future.",
-        "Through intensive training in woodworking, textile weaving, culinary arts, and craftsmanship, our makers develop skills that transform lives and preserve the cultural heritage of NTT.",
-      ],
-      features: [
-        { title: "Professional Training", desc: "Certified instructors" },
-        { title: "Quality Assured", desc: "Strict production standards" },
-        { title: "Social Impact", desc: "Supporting rehabilitation" },
-        { title: "Sustainable", desc: "Eco-friendly materials" },
+      slides: [
+        {
+          title: "Ethical Craftsmanship & Purpose",
+          body: "Every piece is born from the dedication of inmate artisans in Kupang mastering new skills. More than functional objects, each detail carries a story of hope, dignity, and a second chance.",
+          image: "/images/hero-bg-1.jpg",
+        },
+        {
+          title: "Sustainable & Thoughtful Design",
+          body: "Over 80% of our collection uses local materials—teak wood, lontar palm, and coconut shell—alongside thoughtfully upcycled materials to create functional pieces for daily life.",
+          image: "/images/product-rattan.jpg",
+        },
+        {
+          title: "Cultural Appreciation & Heritage",
+          body: "We blend East Nusa Tenggara craft traditions with timeless design. From ikat weaving and woven lontar trays to miniature Sasando harps shaped entirely by hand.",
+          image: "/images/product-tenun.jpg",
+        },
+        {
+          title: "Empowering Real Independence",
+          body: "We work through the cooperative to ensure fair appreciation for every artisan while building lasting vocational confidence as they return to the community.",
+          image: "/images/product-chair.jpg",
+        },
       ],
     },
 
-    // Partners
     partners: {
-      eyebrow: "Partners & Support",
-      names: ["Kemenkumham RI", "Pemprov NTT", "UMKM Indonesia", "Lapas Cooperative"],
+      eyebrow: "Partners & Institutional Support",
+      title: "Official Correctional Synergy in NTT",
+      items: [
+        {
+          code: "imipas",
+          name: "Kementerian Imigrasi & Pemasyarakatan RI",
+          role: "Ditjen Pemasyarakatan — Kanwil NTT",
+        },
+        {
+          code: "lapas",
+          name: "Lapas Kelas IIA & Lapas Perempuan Kelas IIB Kupang",
+          role: "Correctional Workshop & Craft Studio",
+        },
+        {
+          code: "rutan",
+          name: "Rutan Kelas IIB Kupang",
+          role: "Vocational Empowerment & Upcycling",
+        },
+        {
+          code: "koperasi",
+          name: "Koperasi Pemasyarakatan",
+          role: "Official Order & Artisan Welfare Desk",
+        },
+      ],
       hashtag: "#pemasyarakatanNTT",
     },
   },
@@ -249,6 +318,10 @@ export const en: Dictionary = {
       name: "A — Z",
     },
     count: (n: number) => `${n} products`,
+    showingRange: (start: number, end: number, total: number) =>
+      `Showing ${start}–${end} of ${total} products`,
+    prevPage: "Previous",
+    nextPage: "Next",
     empty: "No products match your filters.",
     clearFilters: "Clear filters",
     showProducts: (n: number) => `Show ${n} Products`,
@@ -262,9 +335,12 @@ export const en: Dictionary = {
     outOfStock: "Out of stock",
     addToCart: "Add to Cart",
     buyNow: "Buy Now",
+    buyExternal: "Buy on Origin Website",
+    externalNotice:
+      "Purchases for this product are completed directly on the official origin product page.",
     description: "Description",
     story: "The Story",
-    badges: ["Authentic Product", "Secure Shipping", "Quality Assured"],
+    badges: ["Authentic Inmate Craft", "Official Cooperative Order", "Curated Quality"],
     related: {
       eyebrow: "You May Also Like",
       title: "Related Products",
